@@ -30,6 +30,10 @@ window.__ModuleLoader__.load({
     const NS = '@local/dsh-quota';
     const ACTIVE_ROUTE = '/quota/active';
     const CONFIG_ROUTE = '/quota/config';
+    const TOKENS_ROUTE = '/quota/tokens';
+    /** Token 统计区间：今日 / 最近 7 天 / 最近 30 天。 */
+    const TOKEN_RANGES = ['today', '7d', '30d'];
+    const TOKEN_TTL_MS = 60_000;
     /** 指示器形态偏好存本地：柱状条 / 环状条。 */
     const INDICATOR_KEY = 'dsh-quota:indicator';
     /** 当前模型所属厂商的检查间隔：宿主只读内存，1s 一次开销可忽略。 */
@@ -120,6 +124,17 @@ window.__ModuleLoader__.load({
       indicator: '指示器',
       indicatorBar: '柱状',
       indicatorRing: '环状',
+      tokensTitle: 'Token 用量',
+      tokensToday: '今日',
+      tokens7d: '7 天',
+      tokens30d: '30 天',
+      tokensTotal: '总量',
+      tokensInput: '输入',
+      tokensOutput: '输出',
+      tokensCache: '缓存',
+      tokensRequests: '{n} 次请求',
+      tokensLoading: '统计中…',
+      tokensEmpty: '暂无记录',
       loadingPanel: '正在获取额度…',
       network: '网络不通',
       http: '接口异常',
@@ -157,6 +172,17 @@ window.__ModuleLoader__.load({
       indicator: 'Indicator',
       indicatorBar: 'Bars',
       indicatorRing: 'Rings',
+      tokensTitle: 'Token usage',
+      tokensToday: 'Today',
+      tokens7d: '7 days',
+      tokens30d: '30 days',
+      tokensTotal: 'Total',
+      tokensInput: 'in',
+      tokensOutput: 'out',
+      tokensCache: 'cached',
+      tokensRequests: '{n} requests',
+      tokensLoading: 'counting…',
+      tokensEmpty: 'no records',
       loadingPanel: 'Loading usage…',
       network: 'network error',
       http: 'bad response',
@@ -188,7 +214,7 @@ window.__ModuleLoader__.load({
       '.zq-bar-fill{display:block;height:100%;border-radius:3px;min-width:4px}',
       '.zq-sep{color:var(--dsw-alias-separator-primary);margin:0 1px}',
       // —— 弹出面板（对齐 ContextMeter 面板） ——
-      '.zp-panel{z-index:1100;box-sizing:border-box;border-radius:var(--dsw-radius-lg);background:var(--dsw-specific-menu);width:min(264px,100vw - 24px);backdrop-filter:var(--dsw-menu-backdrop-filter);--dsw-elevation-stroke-color:var(--dsw-alias-border-l1);box-shadow:var(--dsw-elevation-prominent);color:var(--dsw-alias-label-secondary);cursor:default;border:0;padding:10px 11px;font-size:12px;line-height:18px;position:fixed}',
+      '.zp-panel{z-index:1100;box-sizing:border-box;border-radius:var(--dsw-radius-lg);background:var(--dsw-specific-menu);width:min(264px,100vw - 24px);max-height:calc(100vh - 88px);overflow-y:auto;overscroll-behavior:contain;backdrop-filter:var(--dsw-menu-backdrop-filter);--dsw-elevation-stroke-color:var(--dsw-alias-border-l1);box-shadow:var(--dsw-elevation-prominent);color:var(--dsw-alias-label-secondary);cursor:default;border:0;padding:10px 11px;font-size:12px;line-height:18px;position:fixed}',
       '.zp-head{align-items:center;gap:8px;display:flex}',
       '.zp-title{color:var(--dsw-alias-label-primary);font-weight:500}',
       '.zp-badge{margin-left:auto;color:var(--dsw-alias-label-tertiary)}',
@@ -212,6 +238,19 @@ window.__ModuleLoader__.load({
       '.zp-toggle button{font:inherit;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);background:0 0;border:0;border-radius:var(--dsw-radius-sm);padding:1px 6px;cursor:pointer}',
       '.zp-toggle button:hover{background:var(--dsw-alias-interactive-bg-hover)}',
       '.zp-toggle button[aria-pressed=true]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}',
+      '.zp-tok{border-top:.5px solid var(--dsw-alias-border-l1);margin-top:8px;padding-top:6px}',
+      '.zp-tokhead{align-items:center;display:flex;gap:8px;margin-bottom:2px}',
+      '.zp-toktitle{color:var(--dsw-alias-label-secondary)}',
+      '.zp-ranges{margin-left:auto;display:inline-flex;align-items:center;gap:2px}',
+      '.zp-range{font:inherit;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);background:0 0;border:0;border-radius:var(--dsw-radius-sm);padding:1px 5px;cursor:pointer}',
+      '.zp-range:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+      '.zp-range[aria-pressed=true]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.zp-tokrow{align-items:baseline;display:flex;gap:6px}',
+      '.zp-tokrow .zp-toknum{color:var(--dsw-alias-label-primary);font-weight:500;font-variant-numeric:tabular-nums;margin-left:auto}',
+      '.zp-toksub{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px;font-variant-numeric:tabular-nums}',
+      '.zp-spark{display:flex;align-items:flex-end;gap:2px;height:18px;margin-top:4px}',
+      '.zp-spark i{flex:1;min-height:2px;border-radius:1px;background:var(--dsw-alias-state-business-primary);opacity:.85}',
+      '.zp-spark i[data-empty=true]{opacity:.25}',
     ].join('');
 
     /** 记住的指示器形态（无存储时返回 undefined）。 */
@@ -416,7 +455,60 @@ window.__ModuleLoader__.load({
     }
 
     /** 面板内容：标题 + 套餐等级 + 各额度区块 + 更新时间。 */
-    function buildPanel(t, source, state, indicator, onToggle) {
+    /** 区间按钮的词典键。 */
+    function rangeLabelKey(value) {
+      if (value === 'today') return 'tokensToday';
+      if (value === '30d') return 'tokens30d';
+      return 'tokens7d';
+    }
+
+    /** Token 用量区块：今日 / 7 天 / 30 天 切换 + 总量、输入输出、缓存命中、每日柱。 */
+    function TokenSection(t, tokens, range, onRange) {
+      const head = h('div', { key: 'head', className: 'zp-tokhead' }, [
+        h('span', { key: 'title', className: 'zp-toktitle' }, t('tokensTitle')),
+        h('span', { key: 'ranges', className: 'zp-ranges' },
+          TOKEN_RANGES.map((value) => h('button', {
+            key: value,
+            type: 'button',
+            className: 'zp-range',
+            'aria-pressed': range === value,
+            onClick: () => onRange(value),
+          }, t(rangeLabelKey(value))))),
+      ]);
+      if (tokens !== undefined && tokens !== null && tokens.error === 'unsupported') return null;
+      const children = [head];
+      const data = tokens !== undefined && tokens !== null && tokens.ok === true ? tokens : undefined;
+      if (data === undefined) {
+        const failed = tokens !== undefined && tokens !== null && tokens.ok === false;
+        children.push(h('div', { key: 'empty', className: 'zp-toksub' }, failed ? t('unavailable') : t('tokensLoading')));
+        return h('section', { key: 'tokens', className: 'zp-tok' }, children);
+      }
+      const totals = data.totals ?? {};
+      children.push(h('div', { key: 'total', className: 'zp-tokrow' }, [
+        h('span', { key: 'label' }, t('tokensTotal')),
+        h('span', { key: 'num', className: 'zp-toknum' }, formatCount(totals.total ?? 0)),
+      ]));
+      const cache = typeof totals.cacheHit === 'number' ? `${t('tokensCache')} ${totals.cacheHit}%` : undefined;
+      const sub = [t('tokensInput'), formatCount(totals.input ?? 0), '·', t('tokensOutput'), formatCount(totals.output ?? 0)];
+      if (cache !== undefined) sub.push('·', cache);
+      children.push(h('div', { key: 'sub', className: 'zp-toksub' }, sub.join(' ')));
+      children.push(h('div', { key: 'req', className: 'zp-toksub' }, t('tokensRequests', { n: formatCount(totals.requests ?? 0) })));
+      const daily = Array.isArray(data.daily) ? data.daily : [];
+      if (daily.length > 1) {
+        let max = 0;
+        for (const item of daily) max = Math.max(max, item.total ?? 0);
+        children.push(h('div', { key: 'spark', className: 'zp-spark' },
+          daily.map((item, index) => h('i', {
+            key: `bar-${index}`,
+            'data-empty': (item.total ?? 0) === 0,
+            title: `${item.day} · ${formatCount(item.total ?? 0)}`,
+            style: { height: `${Math.max(8, Math.round(((item.total ?? 0) / (max === 0 ? 1 : max)) * 100))}%` },
+          }))));
+      }
+      return h('section', { key: 'tokens', className: 'zp-tok' }, children);
+    }
+
+    function buildPanel(t, source, state, indicator, onToggle, tokens, tokenRange, onTokenRange) {
       const config = SOURCES[source];
       const data = state.phase === 'ready' ? state.data : undefined;
       const level = data !== undefined && data.ok === true ? levelLabel(data.level) : undefined;
@@ -438,6 +530,19 @@ window.__ModuleLoader__.load({
                 ? t('upstream')
                 : t('loadingPanel');
         children.push(h('div', { key: 'empty', className: 'zp-empty' }, reason));
+        if (typeof onTokenRange === 'function') children.push(TokenSection(t, tokens, tokenRange, onTokenRange));
+        if (typeof onToggle === 'function') {
+          const option = (value, labelKey) => h('button', {
+            key: `opt-${value}`,
+            type: 'button',
+            'aria-pressed': indicator === value,
+            onClick: () => onToggle(value),
+          }, t(labelKey));
+          children.push(h('div', { key: 'pref', className: 'zp-pref' }, [
+            h('span', { key: 'label', className: 'zp-pref-label' }, t('indicator')),
+            h('span', { key: 'toggle', className: 'zp-toggle' }, [option('bar', 'indicatorBar'), option('ring', 'indicatorRing')]),
+          ]));
+        }
         return children;
       }
       for (const win of data.windows ?? []) children.push(MeterSection(t, win));
@@ -446,6 +551,7 @@ window.__ModuleLoader__.load({
         h('span', { key: 'upd' }, `${t('updated')} ${formatClock(data.fetchedAt)}`),
         h('span', { key: 'hint' }, t('every60')),
       ]));
+      if (typeof onTokenRange === 'function') children.push(TokenSection(t, tokens, tokenRange, onTokenRange));
       if (typeof onToggle === 'function') {
         const option = (value, labelKey) => h('button', {
           key: `opt-${value}`,
@@ -526,6 +632,9 @@ window.__ModuleLoader__.load({
       const [hidden, setHidden] = useState(false);
       const [open, setOpen] = useState(false);
       const [pos, setPos] = useState(null);
+      const [tokens, setTokens] = useState(undefined);
+      const [tokenRange, setTokenRange] = useState('7d');
+      const tokenMemo = useRef({ range: null, at: 0 });
       const rootRef = useRef(null);
       const panelRef = useRef(null);
       const alive = useRef(true);
@@ -647,6 +756,34 @@ window.__ModuleLoader__.load({
         };
       }, [open]);
 
+      /** 取 Token 统计：同一区间 60s 内复用，失败显示不可用。 */
+      const loadTokens = async (range, force = false) => {
+        const now = Date.now();
+        if (!force && tokenMemo.current.range === range && now - tokenMemo.current.at < TOKEN_TTL_MS) return;
+        setTokens((current) => (current !== undefined && current !== null && current.ok === true ? current : undefined));
+        try {
+          const response = await fetch(`${TOKENS_ROUTE}?range=${encodeURIComponent(range)}`, { headers: { accept: 'application/json' }, cache: 'no-store' });
+          if (response.status === 404) {
+            // 旧版宿主还没这条路由：不显示该区块。
+            if (alive.current) setTokens({ ok: false, error: 'unsupported' });
+            return;
+          }
+          const data = await response.json();
+          if (!alive.current) return;
+          tokenMemo.current = { range, at: Date.now() };
+          setTokens(data);
+        } catch {
+          if (!alive.current) return;
+          tokenMemo.current = { range, at: 0 };
+          setTokens({ ok: false, error: 'network' });
+        }
+      };
+
+      const pickTokenRange = (range) => {
+        setTokenRange(range);
+        loadTokens(range, true);
+      };
+
       // 当前模型没有额度来源（例如官方 DeepSeek 账号）：不占位。
       if (hidden) return null;
       const useSource = source === null ? 'zhipu' : source;
@@ -665,7 +802,7 @@ window.__ModuleLoader__.load({
             }, buildPanel(t, useSource, state, indicator, (value) => {
               storeIndicator(value);
               setIndicator(value);
-            })),
+            }, tokens, tokenRange, pickTokenRange)),
             document.body,
           )
         : null;
@@ -683,7 +820,11 @@ window.__ModuleLoader__.load({
           'aria-haspopup': 'dialog',
           'aria-expanded': open,
           'aria-label': label,
-          onClick: () => setOpen((value) => !value),
+          onClick: () => {
+            const next = !open;
+            setOpen(next);
+            if (next) loadTokens(tokenRange);
+          },
         }, [
           h('span', { key: 'brand' }, config.brand),
           ...nodes,

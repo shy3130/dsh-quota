@@ -6,6 +6,7 @@
  *
  *   GET /quota/active    当前模型对应的额度来源（跟随模型选择切换）
  *   GET /quota/config    界面偏好（指示器形态：柱状条 bar / 环状条 ring）
+ *   GET /quota/tokens    Token 用量统计（今日 / 7 天 / 30 天，读本机会话日志）
  *   GET /quota/zhipu     智谱 GLM Coding Plan
  *   GET /quota/opencode  OpenCode Go 订阅
  *
@@ -23,6 +24,11 @@
  *
  * 路由带登录门：有 connection 服务时走 DSH 登录校验，没有时只放行本机回环请求。
  */
+
+import fs from 'node:fs';
+import nodePath from 'node:path';
+import os from 'node:os';
+import zlib from 'node:zlib';
 
 export const name = '@local/dsh-quota';
 export const inject = ['webServer'];
@@ -289,6 +295,186 @@ const SOURCES = {
   },
 };
 
+// ---------- Token 用量统计 ----------
+//
+// 数据来源：本机会话日志 $DSH_HOME/sessions/<工作区>/<会话>/session*.jsonl(.zstd)。
+// 每个 assistant/message 事件带 data.usage（inputTokens / outputTokens /
+// totalTokens / cacheReadTokens）与事件时间；按本地自然日聚合，不联网、不上传。
+
+/** zstd 帧魔数（小端 28 b5 2f fd）：会话日志由多帧首尾拼接，需逐帧解压。 */
+const ZSTD_MAGIC = [0x28, 0xb5, 0x2f, 0xfd];
+const DAY_MS = 86_400_000;
+/** 区间定义：today=今天，7d=最近 7 个自然日，30d=最近 30 个自然日。 */
+const TOKEN_RANGES = { today: 1, '7d': 7, '30d': 30 };
+const TOKEN_CACHE_MS = 60_000;
+
+/** Node 的一次性 zstd API 只解一帧，所以按魔数切帧后分别解压。 */
+function decodeZstdFrames(buffer) {
+  const pieces = [];
+  let start = -1;
+  for (let index = 0; index + 4 <= buffer.length; index += 1) {
+    if (buffer[index] === ZSTD_MAGIC[0] && buffer[index + 1] === ZSTD_MAGIC[1] && buffer[index + 2] === ZSTD_MAGIC[2] && buffer[index + 3] === ZSTD_MAGIC[3]) {
+      if (start >= 0) pieces.push(zlib.zstdDecompressSync(buffer.subarray(start, index)));
+      start = index;
+      index += 3;
+    }
+  }
+  if (start >= 0) pieces.push(zlib.zstdDecompressSync(buffer.subarray(start)));
+  return pieces;
+}
+
+function localDayStart(time) {
+  const date = new Date(time);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
+
+function dayKeyOf(dayStart) {
+  const date = new Date(dayStart);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+/** 递归列出会话日志文件（只认 jsonl / jsonl.zstd）。 */
+async function listSessionLogs(root) {
+  const logs = [];
+  const walk = async (dir) => {
+    let entries;
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = nodePath.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full);
+        continue;
+      }
+      if (!entry.name.endsWith('.jsonl.zstd') && !entry.name.endsWith('.jsonl')) continue;
+      try {
+        const stats = await fs.promises.stat(full);
+        logs.push({ path: full, mtimeMs: stats.mtimeMs, size: stats.size });
+      } catch {
+        /* 读取竞态：跳过 */
+      }
+    }
+  };
+  await walk(root);
+  return logs;
+}
+
+/** 单文件 usage 事件缓存：按 mtime+size 判断是否需要重读。 */
+const tokenEventCache = new Map();
+
+async function readFileUsageEvents(log) {
+  const signature = `${Math.round(log.mtimeMs)}:${log.size}`;
+  const cached = tokenEventCache.get(log.path);
+  if (cached !== undefined && cached.signature === signature) return cached.events;
+  let raw;
+  try {
+    raw = await fs.promises.readFile(log.path);
+  } catch {
+    tokenEventCache.set(log.path, { signature, events: [] });
+    return [];
+  }
+  let chunks;
+  try {
+    chunks = log.path.endsWith('.zstd') ? decodeZstdFrames(raw) : [raw];
+  } catch {
+    chunks = [];
+  }
+  const events = [];
+  // 一次记录可能跨 zstd 帧：按帧解压后拼成一个字节流再按行切，末行不完整（可能正在写）先丢掉。
+  let pending = '';
+  const consume = (text, final) => {
+    const rows = (pending + text).split('\n');
+    pending = final ? '' : rows.pop();
+    for (const line of rows) {
+      if (!line.includes('"usage"')) continue;
+      let event;
+      try {
+        event = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      const usage = event !== null && typeof event === 'object' ? event.data?.usage : undefined;
+      if (event?.type !== 'assistant/message' || usage === null || typeof usage !== 'object' || typeof event.time !== 'number') continue;
+      const input = num(usage.inputTokens) ?? 0;
+      const output = num(usage.outputTokens) ?? 0;
+      const cacheRead = num(usage.cacheReadTokens) ?? 0;
+      events.push({ time: event.time, input, output, cacheRead, total: num(usage.totalTokens) ?? input + output + cacheRead });
+    }
+  };
+  for (let index = 0; index < chunks.length; index += 1) consume(chunks[index].toString('utf8'), index === chunks.length - 1);
+  if (pending.length === 0 && chunks.length === 0) pending = '';
+  tokenEventCache.set(log.path, { signature, events });
+  return events;
+}
+
+/** 按区间聚合 Token 用量；导出让测试可以直接调用。 */
+export async function collectTokenUsage({ home, range = '7d', now = Date.now() } = {}) {
+  const days = TOKEN_RANGES[range] ?? TOKEN_RANGES['7d'];
+  const todayStart = localDayStart(now);
+  const from = todayStart - (days - 1) * DAY_MS;
+  const buckets = new Map();
+  const logs = await listSessionLogs(nodePath.join(home ?? '', 'sessions'));
+  let scannedFiles = 0;
+  for (const log of logs) {
+    // 最后写入早于区间起点 → 区间内不可能有事件，直接跳过。
+    if (log.mtimeMs < from) continue;
+    scannedFiles += 1;
+    for (const event of await readFileUsageEvents(log)) {
+      if (event.time < from || event.time > now) continue;
+      const key = dayKeyOf(localDayStart(event.time));
+      const bucket = buckets.get(key) ?? { day: key, input: 0, output: 0, cacheRead: 0, total: 0, requests: 0 };
+      bucket.input += event.input;
+      bucket.output += event.output;
+      bucket.cacheRead += event.cacheRead;
+      bucket.total += event.total;
+      bucket.requests += 1;
+      buckets.set(key, bucket);
+    }
+  }
+  const daily = [];
+  for (let back = days - 1; back >= 0; back -= 1) {
+    const key = dayKeyOf(todayStart - back * DAY_MS);
+    daily.push(buckets.get(key) ?? { day: key, input: 0, output: 0, cacheRead: 0, total: 0, requests: 0 });
+  }
+  const totals = { input: 0, output: 0, cacheRead: 0, total: 0, requests: 0 };
+  for (const item of daily) {
+    totals.input += item.input;
+    totals.output += item.output;
+    totals.cacheRead += item.cacheRead;
+    totals.total += item.total;
+    totals.requests += item.requests;
+  }
+  const promptTokens = totals.total - totals.output;
+  const cacheHit = promptTokens > 0 ? Math.round((totals.cacheRead / promptTokens) * 1000) / 10 : null;
+  return {
+    ok: true,
+    range,
+    days,
+    from,
+    to: now,
+    generatedAt: Date.now(),
+    scannedFiles,
+    totals: { ...totals, cacheHit },
+    daily,
+  };
+}
+
+/** $DSH_HOME 解析：插件 config.home > 环境变量 > ~/.dsh。 */
+function resolveHome(config) {
+  if (config !== null && typeof config === 'object' && typeof config.home === 'string' && config.home.length > 0) return config.home;
+  const fromEnv = process.env.DSH_HOME;
+  if (typeof fromEnv === 'string' && fromEnv.length > 0) return fromEnv;
+  return nodePath.join(os.homedir(), '.dsh');
+}
+
+/** 区间结果缓存（60s）+ 在途去重。 */
+const tokenCache = new Map();
+const tokenInflight = new Map();
+
 /** 本机回环 + 同源兜底校验：没有 DSH 登录服务时只放行本机页面。 */
 function fallbackRejection(req) {
   const address = req.socket?.remoteAddress ?? '';
@@ -484,4 +670,43 @@ export function apply(ctx, config = {}) {
     path: '/quota/config',
     handler: configHandler,
   }), 'dsh-quota: /quota/config');
+
+  // Token 用量：读本机会话日志聚合，按区间缓存 60s。
+  const tokenHandler = async (req, res) => {
+    const send = (code, payload) => {
+      res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+      res.end(JSON.stringify(payload));
+    };
+    if (req.method !== 'GET') return send(405, { ok: false, error: 'method-not-allowed' });
+    const conn = connection();
+    const rejection = conn !== undefined && typeof conn.requestRejection === 'function' ? conn.requestRejection(req) : fallbackRejection(req);
+    if (rejection !== undefined) return send(rejection === 401 ? 401 : rejection, { ok: false, error: rejection === 401 ? 'unauthorized' : 'forbidden' });
+    let range = '7d';
+    try {
+      range = new URL(req.url ?? '/', 'http://dsh.invalid').searchParams.get('range') ?? '7d';
+    } catch {
+      range = '7d';
+    }
+    if (!Object.prototype.hasOwnProperty.call(TOKEN_RANGES, range)) return send(400, { ok: false, error: 'bad-range' });
+    const now = Date.now();
+    const cached = tokenCache.get(range);
+    if (cached !== undefined && now - cached.at < TOKEN_CACHE_MS) return send(200, cached.payload);
+    let pending = tokenInflight.get(range);
+    if (pending === undefined) {
+      pending = collectTokenUsage({ home: resolveHome(config), range })
+        .then((payload) => {
+          tokenCache.set(range, { at: Date.now(), payload });
+          return payload;
+        })
+        .catch((error) => ({ ok: false, error: 'internal', detail: String(error?.message ?? error) }))
+        .finally(() => tokenInflight.delete(range));
+      tokenInflight.set(range, pending);
+    }
+    return send(200, await pending);
+  };
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: '/quota/tokens',
+    handler: tokenHandler,
+  }), 'dsh-quota: /quota/tokens');
 }

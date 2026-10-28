@@ -29,7 +29,24 @@ GLM 套餐额度                    套餐 最高
   联网搜索 676  网页阅读 20  文档阅读 0
 ──────────────────────────────────────
 更新于 14:12                    每 60 秒刷新
+Token 用量              今日  7天  30天
+总量                          3.4亿
+输入 586万 · 输出 78万 · 缓存 97.8%
+1711 次请求
+▁▁▁▂▃▅█
+──────────────────────────────────────
+指示器                        柱状  环状
 ```
+
+## Token 用量统计
+
+面板底部新增「Token 用量」区块，可在**今日 / 7 天 / 30 天**之间切换，显示：
+
+- **总量**：输入 + 输出 + 缓存读取的合计 token 数
+- **输入 / 输出 / 缓存命中率**（缓存命中 = `cacheReadTokens / (totalTokens - outputTokens)`，与 DSH 自带的「缓存命中」口径一致）
+- **请求次数**，以及按天的迷你柱状图（今日 1 根，7 天 7 根，30 天 30 根）
+
+数据来自**本机会话日志**（`$DSH_HOME/sessions/**/session*.jsonl.zstd`，逐帧解压后按事件时间归到本地自然日），完全本地计算：不联网、不上传、不落盘新文件。单次扫描 30 个会话约 60~250ms，结果按区间缓存 60 秒。
 
 ## 效果图
 
@@ -112,6 +129,7 @@ git clone https://github.com/shy3130/dsh-quota.git ~/Project/dsh-quota
 |---|---|
 | `GET /quota/active` | 当前模型 → `{ provider, model, source }` |
 | `GET /quota/config` | 界面偏好（`{ indicator: 'bar' | 'ring' }`） |
+| `GET /quota/tokens?range=today\|7d\|30d` | Token 用量统计（读本机会话日志聚合） |
 | `GET /quota/zhipu` | 智谱额度（归一化后） |
 | `GET /quota/opencode` | OpenCode Go 额度（归一化后） |
 | `GET /quota/kimi` | Kimi For Coding 额度（归一化后） |
