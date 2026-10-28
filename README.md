@@ -95,6 +95,26 @@ GLM 套餐额度                    套餐 最高
 
 删掉 `~/.dsh/cordis.patch.yml` 里对应的 `insert` 行，然后重启 DSH。
 
+## 开发与维护
+
+本目录既是插件包，也是 git 仓库（远程：`https://github.com/shy3130/dsh-zhipu-quota`）。
+
+```bash
+npm test                 # 冒烟测试：清单/资源/语法/导出面，不联网
+git add -A && git commit -m "..."
+git push
+```
+
+改动生效方式：
+
+| 改动位置 | 生效方式 |
+|---|---|
+| `client.js`（徽标、面板） | 刷新页面（Cmd+R）；客户端模块会热更新 |
+| `index.js`（路由、取数） | **重启 DSH 桌面应用** |
+| `~/.dsh/cordis.patch.yml`（挂载行） | HMR 热加载 |
+
+⚠️ 安装行指向的是本目录的绝对路径（`/Users/shy/Project/dsh-zhipu-quota/index.js`）。如果移动或重命名这个目录，要同步改补丁层的路径；如果以后按 bundle 方式安装（见上文），则改为包名引用，不再依赖绝对路径。
+
 ## 目录结构
 
 | 文件 | 作用 |
