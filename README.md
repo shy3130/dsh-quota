@@ -31,6 +31,21 @@ GLM 套餐额度                    套餐 最高
 更新于 14:12                    每 60 秒刷新
 ```
 
+## 效果图
+
+截图由插件**真实组件渲染**（同一份 `client.js` + DSH 官方主题 token，Chrome 无头渲染），额度数字为示例快照。
+
+| GLM（智谱） | OpenCode Go |
+|---|---|
+| <img src="docs/images/glm-pill.png" width="440" alt="GLM 徽标"> | <img src="docs/images/opencode-go-pill.png" width="440" alt="OpenCode Go 徽标"> |
+| <img src="docs/images/glm-panel.png" width="440" alt="GLM 明细面板"> | <img src="docs/images/opencode-go-panel.png" width="440" alt="OpenCode Go 明细面板"> |
+
+指示器可切换为环状条（面板底部「指示器」）：
+
+| GLM 环状 | OpenCode Go 环状 |
+|---|---|
+| <img src="docs/images/glm-ring.png" width="440" alt="GLM 环状指示器"> | <img src="docs/images/opencode-go-ring.png" width="440" alt="OpenCode Go 环状指示器"> |
+
 ## 自动切换逻辑
 
 宿主侧路由 `GET /quota/active` 读取 DSH 的「当前默认模型选择」（`agentDefaultModel` 服务，每次切换模型都会更新），把 provider 映射到额度来源：
