@@ -55,6 +55,18 @@ window.__ModuleLoader__.load({
         titleKey: 'titleOpencode',
         pillKeys: ['rolling', 'week', 'month'],
       },
+      kimi: {
+        route: '/quota/kimi',
+        brand: 'Kimi',
+        titleKey: 'titleKimi',
+        pillKeys: ['h5', 'week'],
+      },
+      xiaomi: {
+        route: '/quota/xiaomi',
+        brand: '小米',
+        titleKey: 'titleXiaomi',
+        pillKeys: ['plan', 'month'],
+      },
     };
 
     const zh = {
@@ -65,6 +77,8 @@ window.__ModuleLoader__.load({
       windowRolling: '5小时',
       windowWeek: '本周',
       windowMonth: '本月',
+      windowPlan: '套餐',
+      windowCompensation: '补偿',
       windowOther: '其他',
       titleZhipu: 'GLM 套餐额度',
       titleOpencode: 'OpenCode 套餐额度',
@@ -72,6 +86,10 @@ window.__ModuleLoader__.load({
       titleRolling: '5 小时额度',
       titleWeek: '本周额度',
       titleMonth: '本月额度',
+      titlePlan: '套餐额度',
+      titleCompensation: '补偿额度',
+      titleKimi: 'Kimi 套餐额度',
+      titleXiaomi: '小米套餐额度',
       titleTools: '本月工具额度',
       used: '已用',
       remain: '剩余',
@@ -93,6 +111,8 @@ window.__ModuleLoader__.load({
       windowRolling: '5h',
       windowWeek: 'week',
       windowMonth: 'month',
+      windowPlan: 'plan',
+      windowCompensation: 'bonus',
       windowOther: 'other',
       titleZhipu: 'GLM plan usage',
       titleOpencode: 'OpenCode plan usage',
@@ -100,6 +120,10 @@ window.__ModuleLoader__.load({
       titleRolling: '5-hour quota',
       titleWeek: 'Weekly quota',
       titleMonth: 'Monthly quota',
+      titlePlan: 'Plan quota',
+      titleCompensation: 'Bonus quota',
+      titleKimi: 'Kimi plan usage',
+      titleXiaomi: 'Xiaomi plan usage',
       titleTools: 'Monthly tool quota',
       used: 'used',
       remain: 'left',
@@ -185,6 +209,24 @@ window.__ModuleLoader__.load({
       return out;
     }
 
+    /** 大数字紧凑显示：中文用 万 / 亿，英文用 K / M / B。 */
+    function formatCount(value) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return String(value);
+      const abs = Math.abs(n);
+      const zh = pickLang() === 'zh';
+      const trim = (text) => text.replace(/\.0$/, '');
+      if (zh) {
+        if (abs >= 1e8) return `${trim((n / 1e8).toFixed(1))}亿`;
+        if (abs >= 1e4) return `${trim((n / 1e4).toFixed(abs >= 1e6 ? 0 : 1))}万`;
+        return String(Math.round(n));
+      }
+      if (abs >= 1e9) return `${trim((n / 1e9).toFixed(1))}B`;
+      if (abs >= 1e6) return `${trim((n / 1e6).toFixed(1))}M`;
+      if (abs >= 1e3) return `${trim((n / 1e3).toFixed(1))}K`;
+      return String(Math.round(n));
+    }
+
     function formatClock(ms) {
       if (typeof ms !== 'number' || !Number.isFinite(ms)) return '--';
       try {
@@ -243,6 +285,8 @@ window.__ModuleLoader__.load({
       if (key === 'rolling') return t('windowRolling');
       if (key === 'week') return t('windowWeek');
       if (key === 'month') return t('windowMonth');
+      if (key === 'plan') return t('windowPlan');
+      if (key === 'compensation') return t('windowCompensation');
       return t('windowOther');
     }
 
@@ -252,6 +296,8 @@ window.__ModuleLoader__.load({
       if (key === 'rolling') return t('titleRolling');
       if (key === 'week') return t('titleWeek');
       if (key === 'month') return t('titleMonth');
+      if (key === 'plan') return t('titlePlan');
+      if (key === 'compensation') return t('titleCompensation');
       return t('windowOther');
     }
 
@@ -273,7 +319,15 @@ window.__ModuleLoader__.load({
     function MeterSection(t, win) {
       const percent = typeof win.percent === 'number' ? win.percent : undefined;
       const left = typeof percent === 'number' ? 100 - percent : undefined;
-      const countdown = formatCountdown(t, win.resetsAt);
+      const sub = [];
+      if (left !== undefined) sub.push(h('span', { key: 'left' }, `${t('remain')} `, h('b', null, `${left}%`)));
+      if (win.used !== undefined && win.total !== undefined) {
+        sub.push(h('span', { key: 'counts' }, `${t('used')} `, h('b', null, `${formatCount(win.used)} / ${formatCount(win.total)}`)));
+      }
+      if (win.resetsAt !== undefined) {
+        const countdown = formatCountdown(t, win.resetsAt);
+        sub.push(h('span', { key: 'reset' }, `${t('reset')} `, h('b', null, formatClock(win.resetsAt)), countdown === undefined ? null : ` · ${countdown}`));
+      }
       return h('section', { key: `sec-${win.key}`, className: 'zp-sec' }, [
         h('div', { key: 'row', className: 'zp-row' }, [
           h('span', { key: 'label', className: 'zp-label' }, winTitle(t, win.key)),
@@ -281,10 +335,7 @@ window.__ModuleLoader__.load({
         ]),
         h('div', { key: 'meter', className: 'zp-meter', role: 'presentation', 'aria-hidden': true },
           typeof percent === 'number' ? h('i', { key: 'fill', style: { width: `${percent}%`, background: barColor(percent) } }) : null),
-        h('div', { key: 'sub', className: 'zp-sub' }, [
-          h('span', { key: 'left' }, `${t('remain')} `, h('b', null, `${left ?? '--'}%`)),
-          h('span', { key: 'reset' }, `${t('reset')} `, h('b', null, formatClock(win.resetsAt)), countdown === undefined ? null : ` · ${countdown}`),
-        ]),
+        h('div', { key: 'sub', className: 'zp-sub' }, sub),
       ]);
     }
 

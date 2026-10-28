@@ -54,6 +54,35 @@ function isoEpoch(value) {
   return Number.isFinite(ms) ? ms : undefined;
 }
 
+/** 数字解析：接受数值或数字字符串。 */
+function num(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
+/** 重置时间 → epoch 毫秒：秒级/毫秒级时间戳与 ISO 字符串都能吃。 */
+function resetEpoch(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value > 1e12 ? value : value * 1000;
+  if (typeof value === 'string') {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n > 1e12 ? n : n * 1000;
+    const ms = Date.parse(value);
+    return Number.isFinite(ms) ? ms : undefined;
+  }
+  return undefined;
+}
+
+/** 由 used/limit（或 limit/remaining）推出已用百分比。 */
+function percentOf(used, limit, remaining) {
+  if (typeof limit !== 'number' || limit <= 0) return undefined;
+  const consumed = typeof used === 'number' ? used : typeof remaining === 'number' ? limit - remaining : undefined;
+  return consumed === undefined ? undefined : clampPercent((consumed / limit) * 100);
+}
+
 /**
  * 智谱：把一条 limit 归一化成界面要用的窗口。
  *   TOKENS_LIMIT unit=3 number=5 → 5 小时滚动窗口（percentage）
@@ -121,12 +150,89 @@ function normalizeOpencode(body) {
   return { ok: true, fetchedAt: Date.now(), windows };
 }
 
+/**
+ * Kimi For Coding：GET https://api.kimi.com/coding/v1/usages（Bearer：KIMI_API_KEY 或 Kimi OAuth）
+ * 形状：{ user:{membership:{level}},
+ *        usage:{limit,used,remaining,resetTime}                    // 本周汇总
+ *        limits:[{window:{duration,timeUnit}, detail:{...}}] }     // 滚动窗口（如 5 小时）
+ */
+function normalizeKimi(body) {
+  const root = body !== null && typeof body === 'object' ? body : {};
+  const windows = [];
+  const push = (key, detail) => {
+    if (detail === null || typeof detail !== 'object') return;
+    const used = num(detail.used);
+    const total = num(detail.limit);
+    const percent = percentOf(used, total, num(detail.remaining)) ?? clampPercent(detail.percent);
+    if (percent === undefined && total === undefined) return;
+    windows.push({ key, percent, resetsAt: resetEpoch(detail.resetTime), used, total });
+  };
+  push('week', root.usage);
+  const limits = Array.isArray(root.limits) ? root.limits : [];
+  for (const entry of limits) {
+    if (entry === null || typeof entry !== 'object') continue;
+    const info = entry.window !== null && typeof entry.window === 'object' ? entry.window : {};
+    const duration = num(info.duration) ?? 0;
+    const unit = String(info.timeUnit ?? '').toUpperCase();
+    const hours = unit.includes('MINUTE') ? duration / 60 : unit.includes('HOUR') ? duration : unit.includes('DAY') ? duration * 24 : duration;
+    const key = Math.abs(hours - 5) < 0.6 ? 'h5' : hours >= 24 * 6 ? 'week' : 'other';
+    if (windows.some((row) => row.key === key)) continue;
+    push(key, entry.detail ?? entry);
+  }
+  const order = { h5: 0, week: 1, other: 2 };
+  windows.sort((a, b) => (order[a.key] ?? 9) - (order[b.key] ?? 9));
+  const level = root.user?.membership?.level;
+  return {
+    ok: true,
+    fetchedAt: Date.now(),
+    level: typeof level === 'string' ? level.replace(/^LEVEL_/, '').toLowerCase() : undefined,
+    windows,
+  };
+}
+
+/**
+ * 小米 Token 套餐：GET https://platform.xiaomimimo.com/api/v1/tokenPlan/usage
+ * 认证是浏览器 SSO Cookie（tp- 开头的 API Key 查不了），Cookie 通过
+ * XIAOMI_MIMO_SESSION_COOKIE 提供。
+ * 形状：{ code:0, data:{ usage:{items:[{name:'plan_total_token',used,limit,percent},
+ *        {name:'compensation_total_token',...}]}, monthUsage:{items:[{name:'month_total_token',...}]} } }
+ */
+function normalizeXiaomi(body) {
+  const root = body !== null && typeof body === 'object' ? body : {};
+  const data = root.data !== null && typeof root.data === 'object' ? root.data : {};
+  const itemsOf = (group) => (group !== null && typeof group === 'object' && Array.isArray(group.items) ? group.items : []);
+  const windows = [];
+  const add = (key, item) => {
+    if (item === null || typeof item !== 'object') return;
+    const used = num(item.used);
+    const total = num(item.limit);
+    let percent = percentOf(used, total);
+    if (percent === undefined) {
+      const raw = num(item.percent);
+      if (raw !== undefined) percent = clampPercent(raw > 0 && raw <= 1 ? raw * 100 : raw);
+    }
+    if (percent === undefined && total === undefined) return;
+    windows.push({ key, percent, used, total });
+  };
+  const planItems = itemsOf(data.usage);
+  add('plan', planItems.find((row) => row?.name === 'plan_total_token'));
+  add('compensation', planItems.find((row) => row?.name === 'compensation_total_token'));
+  add('month', itemsOf(data.monthUsage).find((row) => row?.name === 'month_total_token'));
+  return { ok: true, fetchedAt: Date.now(), windows };
+}
+
 /** 模型 provider → 额度来源。 */
 const PROVIDER_SOURCES = {
   'zai-coding-cn': 'zhipu',
-  'zai': 'zhipu',
+  zai: 'zhipu',
   'opencode-go': 'opencode',
-  'opencode': 'opencode',
+  opencode: 'opencode',
+  'kimi-coding': 'kimi',
+  kimi: 'kimi',
+  'xiaomi-token-plan-cn': 'xiaomi',
+  'xiaomi-token-plan-ams': 'xiaomi',
+  'xiaomi-token-plan-sgp': 'xiaomi',
+  xiaomi: 'xiaomi',
 };
 
 /** 上游额度源：路由、地址、凭据引用与归一化函数。 */
@@ -136,6 +242,7 @@ const SOURCES = {
     baseUrl: 'https://open.bigmodel.cn',
     path: '/api/monitor/usage/quota/limit',
     credentialRef: 'ZAI_CODING_CN_API_KEY',
+    validate: (body) => body !== null && typeof body === 'object' && body.success === true,
     normalize: normalizeZhipu,
   },
   opencode: {
@@ -144,6 +251,40 @@ const SOURCES = {
     path: '/zen/go/v1/usage',
     credentialRef: 'OPENCODE_GO_API_KEY',
     normalize: normalizeOpencode,
+  },
+  kimi: {
+    route: '/quota/kimi',
+    baseUrl: 'https://api.kimi.com',
+    path: '/coding/v1/usages',
+    credentialRef: 'KIMI_API_KEY',
+    /** 优先用 DSH 里 Kimi OAuth 登录存的 access token，其次 KIMI_API_KEY。 */
+    readSecret: async (ctx) => {
+      try {
+        const credentials = ctx.get('credentials');
+        if (credentials === undefined || typeof credentials.readRecord !== 'function') return undefined;
+        const record = await credentials.readRecord('llm-pi-ai/kimi-coding');
+        const payload = record !== null && typeof record === 'object' ? record.payload : undefined;
+        const token = payload?.access ?? payload?.accessToken ?? payload?.token;
+        return typeof token === 'string' && token.length > 0 ? token : undefined;
+      } catch {
+        return undefined;
+      }
+    },
+    headers: (key) => ({ authorization: `Bearer ${key}`, accept: 'application/json', 'user-agent': 'KimiCLI/1.5' }),
+    normalize: normalizeKimi,
+  },
+  xiaomi: {
+    route: '/quota/xiaomi',
+    baseUrl: 'https://platform.xiaomimimo.com',
+    path: '/api/v1/tokenPlan/usage',
+    credentialRef: 'XIAOMI_MIMO_SESSION_COOKIE',
+    headers: (key) => ({
+      cookie: key,
+      accept: 'application/json',
+      referer: 'https://platform.xiaomimimo.com/console/plan-manage',
+    }),
+    validate: (body) => body !== null && typeof body === 'object' && body.code === 0,
+    normalize: normalizeXiaomi,
   },
 };
 
@@ -182,6 +323,14 @@ export function apply(ctx, config = {}) {
 
     /** 读凭据；凭据服务优先（与 Models 页写入的是同一份），没有就退回环境变量。 */
     const readKey = async () => {
+      if (typeof source.readSecret === 'function') {
+        try {
+          const secret = await source.readSecret(ctx);
+          if (typeof secret === 'string' && secret.length > 0) return secret;
+        } catch {
+          /* 记录读取失败时回落到 ref / 环境变量 */
+        }
+      }
       let credentials;
       try {
         credentials = ctx.get('credentials');
@@ -207,7 +356,7 @@ export function apply(ctx, config = {}) {
       try {
         response = await fetch(`${baseUrl}${source.path}`, {
           method: 'GET',
-          headers: { authorization: `Bearer ${key}`, accept: 'application/json' },
+          headers: typeof source.headers === 'function' ? source.headers(key) : { authorization: `Bearer ${key}`, accept: 'application/json' },
           signal: AbortSignal.timeout(TIMEOUT_MS),
         });
       } catch (error) {
@@ -220,9 +369,13 @@ export function apply(ctx, config = {}) {
       } catch {
         return { ok: false, error: 'parse' };
       }
-      // 智谱用 {code:200, success:true}；OpenCode 直接返回 {usage:{...}}。
-      if (id === 'zhipu' && (body === null || typeof body !== 'object' || body.success !== true)) {
-        return { ok: false, error: 'upstream', code: body !== null && typeof body === 'object' ? body.code : undefined };
+      // 成功标志各家不同：智谱 {success:true}、小米 {code:0}、Kimi/OpenCode 直接给数据。
+      if (typeof source.validate === 'function' && !source.validate(body)) {
+        return {
+          ok: false,
+          error: 'upstream',
+          code: body !== null && typeof body === 'object' ? (body.code ?? body.message) : undefined,
+        };
       }
       try {
         return source.normalize(body);

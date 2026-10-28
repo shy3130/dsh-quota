@@ -5,6 +5,8 @@
 ```
 GLM 5小时 21% ▰ · 本周 6% ▰            ← 当前模型在智谱（zai-coding-cn）
 OpenCode 5小时 8% ▰ · 本周 3% ▰ · 本月 1% ▰   ← 当前模型在 OpenCode Go（opencode-go）
+Kimi 5小时 24% ▰ · 本周 42% ▰          ← 当前模型在 Kimi For Coding（kimi-coding）
+小米 套餐 12% ▰ · 本月 17% ▰           ← 当前模型在小米 Token 套餐（xiaomi-token-plan-*）
 （其它厂商，例如官方 DeepSeek 账号，徽标不占位）
 ```
 
@@ -37,6 +39,8 @@ GLM 套餐额度                    套餐 最高
 |---|---|---|
 | `zai-coding-cn` / `zai` | 智谱 GLM | `GET https://open.bigmodel.cn/api/monitor/usage/quota/limit` |
 | `opencode-go` / `opencode` | OpenCode Go | `GET https://opencode.ai/zen/go/v1/usage` |
+| `kimi-coding` | Kimi For Coding | `GET https://api.kimi.com/coding/v1/usages` |
+| `xiaomi-token-plan-cn` / `-ams` / `-sgp` / `xiaomi` | 小米 Token 套餐 | `GET https://platform.xiaomimimo.com/api/v1/tokenPlan/usage` |
 | 其它（如官方 DeepSeek 账号） | 无 | 徽标自动隐藏 |
 
 切换模型后，徽标最多 15 秒内跟着切换（宿主只读内存，轮询很便宜）；额度本身每 60 秒刷新一次。
@@ -46,6 +50,8 @@ GLM 套餐额度                    套餐 最高
 - 两个接口返回的都是**已用百分比**。智谱的 `TIME_LIMIT` 同时给 `696/4000` 与 `percentage: 17`，可证 `percentage` = 已用；OpenCode 的 `rolling/weekly/monthly` 同理。面板里同时给「剩余」。
 - 智谱窗口：`TOKENS_LIMIT(unit=3,number=5)` → 5 小时、`TOKENS_LIMIT(unit=6)` → 本周、`TIME_LIMIT` → 本月工具额度（含分项）。
 - OpenCode 窗口：`rolling` → **5 小时**（官方文档：5-hour = 月额度的 20%）、`weekly` → 本周（50%）、`monthly` → 本月（100%）；三个都显示在徽标上（智谱是 5 小时 + 本周两个，工具额度在面板里）。
+- Kimi 窗口：`usage` → 本周汇总，`limits[]` 里 `window.duration=300 MINUTE` 的是 5 小时窗口；token 数用「万 / 亿」紧凑显示。
+- 小米窗口：`usage.items` 的 `plan_total_token`（套餐）、`compensation_total_token`（补偿，仅有额度时显示）、`monthUsage.items` 的 `month_total_token`（本月总量）；接口给的是 token 数，百分比由 used/limit 计算。
 - 重置倒计时用短单位、小写：`3h 12m`、`6d 21h`，整点省略分钟、整天省略小时、不足 1 分钟 `<1m`。
 - 徽标内文字统一 12px / 同色 / 400 字重（与官方统计徽标同规格），进度条放在数字后面：常态绿、≥70% 琥珀、≥90% 红，轨道同色 18% 浅染。
 
@@ -74,6 +80,8 @@ git clone https://github.com/shy3130/dsh-quota.git ~/Project/dsh-quota
 | `GET /quota/active` | 当前模型 → `{ provider, model, source }` |
 | `GET /quota/zhipu` | 智谱额度（归一化后） |
 | `GET /quota/opencode` | OpenCode Go 额度（归一化后） |
+| `GET /quota/kimi` | Kimi For Coding 额度（归一化后） |
+| `GET /quota/xiaomi` | 小米 Token 套餐额度（归一化后） |
 
 三者都带 DSH 登录门；密钥只在宿主进程内使用，不会进入返回给浏览器的 JSON。
 
@@ -93,7 +101,24 @@ git clone https://github.com/shy3130/dsh-quota.git ~/Project/dsh-quota
           opencode:
             baseUrl: 'https://opencode.ai'
             credentialRef: 'OPENCODE_GO_API_KEY'
+          kimi:
+            baseUrl: 'https://api.kimi.com'
+            credentialRef: 'KIMI_API_KEY'
+          xiaomi:
+            baseUrl: 'https://platform.xiaomimimo.com'
+            credentialRef: 'XIAOMI_MIMO_SESSION_COOKIE'
 ```
+
+### 各家凭据从哪来
+
+| 厂商 | 需要的凭据 | 获取方式 |
+|---|---|---|
+| 智谱 GLM | `ZAI_CODING_CN_API_KEY` | 智谱开放平台 API Key（与模型路由同一个） |
+| OpenCode Go | `OPENCODE_GO_API_KEY` | OpenCode Zen 后台的 API Key |
+| Kimi For Coding | `KIMI_API_KEY`，或 DSH 里 Kimi 的 OAuth 登录 | 优先读 DSH 凭据记录 `llm-pi-ai/kimi-coding` 的 access token；没有时用 `sk-kimi-...` API Key |
+| 小米 Token 套餐 | `XIAOMI_MIMO_SESSION_COOKIE` | 小米用量接口只认浏览器 SSO **Cookie**（`tp-...` API Key 查不了）：登录 platform.xiaomimimo.com → DevTools → Cookies → 整条复制 |
+
+凭据可以放在环境变量里，也可以经 DSH 的凭据服务按上面的名字保存（插件只用引用名，不落盘）。
 
 ## 卸载
 
