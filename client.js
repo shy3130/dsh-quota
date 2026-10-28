@@ -6,15 +6,15 @@
  *   GLM 5小时 19% ▰▰ · 本周 6% ▰        ← 当前模型在智谱
  *   OpenCode 滚动 6% ▰▰ · 本周 2% ▰     ← 当前模型在 OpenCode Go
  *
- * 徽标显示哪一家，由宿主侧 GET /zhipu-quota/active 决定：它读取 DSH 的
+ * 徽标显示哪一家，由宿主侧 GET /quota/active 决定：它读取 DSH 的
  * "当前默认模型选择"（每次切换模型都会更新），把 provider 映射到额度来源。
- * 数据来自对应来源的路由（/zhipu-quota/quota、/zhipu-quota/opencode）。
+ * 数据来自对应来源的路由（/quota/zhipu、/quota/opencode）。
  *
  * 点击弹出明细面板（样式对齐官方「上下文已用」面板）：各窗口的已用、剩余、
  * 重置时间（倒计时用 <1m / 42m / 3h 24m / 6d 21h），工具额度与分项明细。
  */
 window.__ModuleLoader__.load({
-  id: '@local/dsh-zhipu-quota',
+  id: '@local/dsh-quota',
   factory(require) {
     const React = require('react');
     const ReactDOM = (() => {
@@ -27,8 +27,8 @@ window.__ModuleLoader__.load({
     const h = React.createElement;
     const { useEffect, useState, useRef } = React;
 
-    const NS = '@local/dsh-zhipu-quota';
-    const ACTIVE_ROUTE = '/zhipu-quota/active';
+    const NS = '@local/dsh-quota';
+    const ACTIVE_ROUTE = '/quota/active';
     /** 检查当前模型所属厂商的间隔：便宜（宿主只读内存），快一点以便及时切换。 */
     const ACTIVE_POLL_MS = 15_000;
     /** 同一来源的额度刷新间隔（宿主侧还有 55s 缓存）。 */
@@ -44,13 +44,13 @@ window.__ModuleLoader__.load({
     /** 两家额度来源的展示配置。 */
     const SOURCES = {
       zhipu: {
-        route: '/zhipu-quota/quota',
+        route: '/quota/zhipu',
         brand: 'GLM',
         titleKey: 'titleZhipu',
         pillKeys: ['h5', 'week'],
       },
       opencode: {
-        route: '/zhipu-quota/opencode',
+        route: '/quota/opencode',
         brand: 'OpenCode',
         titleKey: 'titleOpencode',
         pillKeys: ['rolling', 'week', 'month'],
@@ -499,7 +499,7 @@ window.__ModuleLoader__.load({
         ref: rootRef,
         className: 'zq-anchor',
         'data-align': ALIGN_RIGHT ? 'end' : 'start',
-        'data-composer-stat': 'zhipu-quota',
+        'data-composer-stat': 'dsh-quota',
       }, [
         h('style', { key: 'css' }, CSS),
         h('button', {
@@ -523,16 +523,16 @@ window.__ModuleLoader__.load({
       apply(ctx) {
         const t = ctx.locale !== undefined && typeof ctx.locale.bind === 'function' ? ctx.locale.bind(NS) : fallbackTranslate;
         if (ctx.locale !== undefined && typeof ctx.locale.register === 'function') {
-          ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'zhipu-quota: 词典');
+          ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-quota: 词典');
         }
         const reg = () => ctx.slots.register({
           name: 'conversation.composer.dock',
-          id: 'zhipu-quota',
+          id: 'dsh-quota',
           order: 2,
           locale: NS,
           inject: () => ({ t }),
         }, QuotaPill);
-        ctx.effect(() => (typeof ctx.slots.inject === 'function' ? ctx.slots.inject('conversation.composer.dock', reg) : reg()), 'zhipu-quota: 状态栏');
+        ctx.effect(() => (typeof ctx.slots.inject === 'function' ? ctx.slots.inject('conversation.composer.dock', reg) : reg()), 'dsh-quota: 状态栏');
       },
     };
   },

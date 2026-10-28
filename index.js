@@ -4,9 +4,9 @@
  * 输入框下方的状态栏（conversation.composer.dock）由 client.js 渲染；
  * 它轮询本插件在 DSH webServer 上挂的两个路由取数：
  *
- *   GET /zhipu-quota/active    当前模型对应的额度来源（跟随模型选择切换）
- *   GET /zhipu-quota/quota     智谱 GLM Coding Plan
- *   GET /zhipu-quota/opencode  OpenCode Go 订阅
+ *   GET /quota/active    当前模型对应的额度来源（跟随模型选择切换）
+ *   GET /quota/zhipu     智谱 GLM Coding Plan
+ *   GET /quota/opencode  OpenCode Go 订阅
  *
  * 两者都归一化成同一份 JSON：
  *   { ok, fetchedAt, level?, windows: [{ key, percent, resetsAt }], tools?: {...} }
@@ -23,7 +23,7 @@
  * 路由带登录门：有 connection 服务时走 DSH 登录校验，没有时只放行本机回环请求。
  */
 
-export const name = '@local/dsh-zhipu-quota';
+export const name = '@local/dsh-quota';
 export const inject = ['webServer'];
 
 /** 成功结果缓存时长：轮询间隔 60s，缓存 55s 让页面刷新时能复用一次。 */
@@ -132,14 +132,14 @@ const PROVIDER_SOURCES = {
 /** 上游额度源：路由、地址、凭据引用与归一化函数。 */
 const SOURCES = {
   zhipu: {
-    route: '/zhipu-quota/quota',
+    route: '/quota/zhipu',
     baseUrl: 'https://open.bigmodel.cn',
     path: '/api/monitor/usage/quota/limit',
     credentialRef: 'ZAI_CODING_CN_API_KEY',
     normalize: normalizeZhipu,
   },
   opencode: {
-    route: '/zhipu-quota/opencode',
+    route: '/quota/opencode',
     baseUrl: 'https://opencode.ai',
     path: '/zen/go/v1/usage',
     credentialRef: 'OPENCODE_GO_API_KEY',
@@ -292,7 +292,7 @@ export function apply(ctx, config = {}) {
       kind: 'exact',
       path: reader.route,
       handler,
-    }), `zhipu-quota: ${reader.route}`);
+    }), `dsh-quota: ${reader.route}`);
   }
 
   const activeHandler = (req, res) => {
@@ -308,7 +308,7 @@ export function apply(ctx, config = {}) {
   };
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
-    path: '/zhipu-quota/active',
+    path: '/quota/active',
     handler: activeHandler,
-  }), 'zhipu-quota: /zhipu-quota/active');
+  }), 'dsh-quota: /quota/active');
 }

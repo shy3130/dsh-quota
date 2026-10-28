@@ -1,4 +1,4 @@
-# dsh-zhipu-quota
+# dsh-quota
 
 在 DeepSeek Harness 输入框下方的状态栏（`conversation.composer.dock`）显示**当前模型所属厂商的套餐额度**，并随模型切换自动切换。
 
@@ -31,7 +31,7 @@ GLM 套餐额度                    套餐 最高
 
 ## 自动切换逻辑
 
-宿主侧路由 `GET /zhipu-quota/active` 读取 DSH 的「当前默认模型选择」（`agentDefaultModel` 服务，每次切换模型都会更新），把 provider 映射到额度来源：
+宿主侧路由 `GET /quota/active` 读取 DSH 的「当前默认模型选择」（`agentDefaultModel` 服务，每次切换模型都会更新），把 provider 映射到额度来源：
 
 | provider | 来源 | 数据接口 |
 |---|---|---|
@@ -55,8 +55,8 @@ GLM 套餐额度                    套餐 最高
 
 ```yaml
 - insert:
-    - id: zhipu-quota
-      name: '/Users/shy/Project/dsh-zhipu-quota/index.js'
+    - id: dsh-quota
+      name: '/Users/shy/Project/dsh-quota/index.js'
 ```
 
 指向 `index.js`（而不是包目录）：Node 的 ESM 不支持目录导入；客户端模块系统会从该文件向上找到 `package.json`，读取 `dsh.client` 后再加载 `client.js`。
@@ -67,9 +67,9 @@ GLM 套餐额度                    套餐 最高
 
 | 路由 | 用途 |
 |---|---|
-| `GET /zhipu-quota/active` | 当前模型 → `{ provider, model, source }` |
-| `GET /zhipu-quota/quota` | 智谱额度（归一化后） |
-| `GET /zhipu-quota/opencode` | OpenCode Go 额度（归一化后） |
+| `GET /quota/active` | 当前模型 → `{ provider, model, source }` |
+| `GET /quota/zhipu` | 智谱额度（归一化后） |
+| `GET /quota/opencode` | OpenCode Go 额度（归一化后） |
 
 三者都带 DSH 登录门；密钥只在宿主进程内使用，不会进入返回给浏览器的 JSON。
 
@@ -79,8 +79,8 @@ GLM 套餐额度                    套餐 最高
 
 ```yaml
 - insert:
-    - id: zhipu-quota
-      name: '/Users/shy/Project/dsh-zhipu-quota/index.js'
+    - id: dsh-quota
+      name: '/Users/shy/Project/dsh-quota/index.js'
       config:
         sources:
           zhipu:
@@ -97,7 +97,7 @@ GLM 套餐额度                    套餐 最高
 
 ## 开发与维护
 
-本目录既是插件包，也是 git 仓库（远程：`https://github.com/shy3130/dsh-zhipu-quota`）。
+本目录既是插件包，也是 git 仓库（远程：`https://github.com/shy3130/dsh-quota`）。
 
 ```bash
 npm test                 # 冒烟测试：清单/资源/语法/导出面，不联网
@@ -113,7 +113,7 @@ git push
 | `index.js`（路由、取数） | **重启 DSH 桌面应用** |
 | `~/.dsh/cordis.patch.yml`（挂载行） | HMR 热加载 |
 
-⚠️ 安装行指向的是本目录的绝对路径（`/Users/shy/Project/dsh-zhipu-quota/index.js`）。如果移动或重命名这个目录，要同步改补丁层的路径；如果以后按 bundle 方式安装（见上文），则改为包名引用，不再依赖绝对路径。
+⚠️ 安装行指向的是本目录的绝对路径（`/Users/shy/Project/dsh-quota/index.js`）。如果移动或重命名这个目录，要同步改补丁层的路径；如果以后按 bundle 方式安装（见上文），则改为包名引用，不再依赖绝对路径。
 
 ## 目录结构
 

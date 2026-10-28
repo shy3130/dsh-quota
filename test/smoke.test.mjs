@@ -40,7 +40,7 @@ test('sources are syntactically valid', () => {
 
 test('host plugin exports the expected surface', async () => {
   const mod = await import('../index.js');
-  assert.equal(mod.name, '@local/dsh-zhipu-quota');
+  assert.equal(mod.name, '@local/dsh-quota');
   assert.ok(Array.isArray(mod.inject));
   assert.ok(mod.inject.includes('webServer'));
   assert.equal(typeof mod.apply, 'function');
@@ -48,6 +48,6 @@ test('host plugin exports the expected surface', async () => {
 
 test('bundle patch inserts the plugin row once', () => {
   const text = readFileSync(join(root, 'cordis.patch.yml'), 'utf8');
-  const matches = text.match(/id:\s*zhipu-quota/g) ?? [];
+  const matches = text.match(/id:\s*dsh-quota/g) ?? [];
   assert.equal(matches.length, 1);
 });
