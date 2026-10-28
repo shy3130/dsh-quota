@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Plan quota statusline",
+    "description": "Shows the quota of the provider behind the current model under the composer: Zhipu GLM (5-hour / weekly / tool quota) and OpenCode Go (rolling / weekly / monthly). Click for used, remaining and reset details."
+  }
+}

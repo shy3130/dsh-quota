@@ -1,0 +1,55 @@
+{
+  "name": "@local/dsh-zhipu-quota",
+  "version": "1.0.0",
+  "private": true,
+  "description": "在输入框下方的状态栏显示智谱 GLM Coding Plan 套餐额度消耗（5 小时窗口 / 本周 / 工具额度）。",
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md"
+  ],
+  "icon": "./icon.svg",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shy3130/dsh-zhipu-quota.git"
+  },
+  "homepage": "https://github.com/shy3130/dsh-zhipu-quota#readme",
+  "bugs": {
+    "url": "https://github.com/shy3130/dsh-zhipu-quota/issues"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "quota",
+    "statusline",
+    "glm",
+    "opencode"
+  ]
+}

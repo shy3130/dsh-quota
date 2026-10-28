@@ -1,0 +1,107 @@
+# dsh-zhipu-quota
+
+在 DeepSeek Harness 输入框下方的状态栏（`conversation.composer.dock`）显示**当前模型所属厂商的套餐额度**，并随模型切换自动切换。
+
+```
+GLM 5小时 21% ▰ · 本周 6% ▰            ← 当前模型在智谱（zai-coding-cn）
+OpenCode 5小时 8% ▰ · 本周 3% ▰ · 本月 1% ▰   ← 当前模型在 OpenCode Go（opencode-go）
+（其它厂商，例如官方 DeepSeek 账号，徽标不占位）
+```
+
+点击徽标弹出明细面板（样式对齐官方「上下文已用」面板，264px 宽紧凑布局）：
+
+```
+GLM 套餐额度                    套餐 最高
+──────────────────────────────────────
+5 小时额度                     已用 21%
+▓▓▓▓░░░░░░░░░░░░░░░░░░
+剩余 79%         重置 17:12 · 3h 12m
+
+本周额度                         已用 6%
+▓░░░░░░░░░░░░░░░░░░░░░
+剩余 94%       重置 11/4 11:12 · 6d 21h
+
+本月工具额度                  696 / 4000
+▓▓▓░░░░░░░░░░░░░░░░░░░
+已用 17% · 剩余 3304 · 重置 11/5 11:12 · 7d 21h
+  联网搜索 676  网页阅读 20  文档阅读 0
+──────────────────────────────────────
+更新于 14:12                    每 60 秒刷新
+```
+
+## 自动切换逻辑
+
+宿主侧路由 `GET /zhipu-quota/active` 读取 DSH 的「当前默认模型选择」（`agentDefaultModel` 服务，每次切换模型都会更新），把 provider 映射到额度来源：
+
+| provider | 来源 | 数据接口 |
+|---|---|---|
+| `zai-coding-cn` / `zai` | 智谱 GLM | `GET https://open.bigmodel.cn/api/monitor/usage/quota/limit` |
+| `opencode-go` / `opencode` | OpenCode Go | `GET https://opencode.ai/zen/go/v1/usage` |
+| 其它（如官方 DeepSeek 账号） | 无 | 徽标自动隐藏 |
+
+切换模型后，徽标最多 15 秒内跟着切换（宿主只读内存，轮询很便宜）；额度本身每 60 秒刷新一次。
+
+## 数据与语义
+
+- 两个接口返回的都是**已用百分比**。智谱的 `TIME_LIMIT` 同时给 `696/4000` 与 `percentage: 17`，可证 `percentage` = 已用；OpenCode 的 `rolling/weekly/monthly` 同理。面板里同时给「剩余」。
+- 智谱窗口：`TOKENS_LIMIT(unit=3,number=5)` → 5 小时、`TOKENS_LIMIT(unit=6)` → 本周、`TIME_LIMIT` → 本月工具额度（含分项）。
+- OpenCode 窗口：`rolling` → **5 小时**（官方文档：5-hour = 月额度的 20%）、`weekly` → 本周（50%）、`monthly` → 本月（100%）；三个都显示在徽标上（智谱是 5 小时 + 本周两个，工具额度在面板里）。
+- 重置倒计时用短单位、小写：`3h 12m`、`6d 21h`，整点省略分钟、整天省略小时、不足 1 分钟 `<1m`。
+- 徽标内文字统一 12px / 同色 / 400 字重（与官方统计徽标同规格），进度条放在数字后面：常态绿、≥70% 琥珀、≥90% 红，轨道同色 18% 浅染。
+
+## 安装方式
+
+插件包是标准 DSH bundle。当前安装方式是写进**本机用户补丁层** `~/.dsh/cordis.patch.yml`：
+
+```yaml
+- insert:
+    - id: zhipu-quota
+      name: '/Users/shy/Project/dsh-zhipu-quota/index.js'
+```
+
+指向 `index.js`（而不是包目录）：Node 的 ESM 不支持目录导入；客户端模块系统会从该文件向上找到 `package.json`，读取 `dsh.client` 后再加载 `client.js`。
+
+**宿主侧改动（`index.js`）需要重启一次 DSH 桌面应用**才会生效（新增路由不会热加载）；只改 `client.js` 时页面刷新即可。改 `~/.dsh/cordis.patch.yml` 由 HMR 热加载。
+
+## 路由
+
+| 路由 | 用途 |
+|---|---|
+| `GET /zhipu-quota/active` | 当前模型 → `{ provider, model, source }` |
+| `GET /zhipu-quota/quota` | 智谱额度（归一化后） |
+| `GET /zhipu-quota/opencode` | OpenCode Go 额度（归一化后） |
+
+三者都带 DSH 登录门；密钥只在宿主进程内使用，不会进入返回给浏览器的 JSON。
+
+## 配置
+
+行上的 `config` 可覆盖各来源的地址与凭据引用：
+
+```yaml
+- insert:
+    - id: zhipu-quota
+      name: '/Users/shy/Project/dsh-zhipu-quota/index.js'
+      config:
+        sources:
+          zhipu:
+            baseUrl: 'https://open.bigmodel.cn'
+            credentialRef: 'ZAI_CODING_CN_API_KEY'
+          opencode:
+            baseUrl: 'https://opencode.ai'
+            credentialRef: 'OPENCODE_GO_API_KEY'
+```
+
+## 卸载
+
+删掉 `~/.dsh/cordis.patch.yml` 里对应的 `insert` 行，然后重启 DSH。
+
+## 目录结构
+
+| 文件 | 作用 |
+|---|---|
+| `index.js` | 宿主侧：三条路由、凭据读取、上游取数与归一化、缓存与登录门 |
+| `client.js` | 浏览器侧：徽标、自动切换、点击面板与轮询 |
+| `cordis.patch.yml` | bundle 自身的插件行（作为 profile bundle 安装时使用） |
+| `package.json` | 清单：`exports`、`dsh.bundle.patch`、`dsh.client` |
+| `locale/*.json` | 插件管理页显示的标题与说明 |
+| `icon.svg` | 插件图标 |
