@@ -101,16 +101,16 @@ dsh plugin --profile desktop add github:shy3130/dsh-quota
 # 安装（跟踪 main 最新提交）
 dsh plugin --profile desktop add github:shy3130/dsh-quota
 
-# 钉住某个发布版本（生产环境推荐）
-dsh plugin --profile desktop add github:shy3130/dsh-quota#v1.2.1
+# 钉住某个版本（git tag 即可，不需要 GitHub Release）
+dsh plugin --profile desktop add github:shy3130/dsh-quota#v1.3.1
 
 # 更新已安装的版本
 dsh plugin --profile desktop update @local/dsh-quota
 ```
 
 - 安装 / 更新后需要**完全退出并重开 DSH**：宿主插件在启动时加载，仅刷新页面不够
-- 各版本说明与源码包见 [Releases](https://github.com/shy3130/dsh-quota/releases)
-- `pnpm-lock.yaml` 会把 GitHub 依赖钉到具体提交（`codeload.github.com/.../tar.gz/<sha>`），「更新」就是重新解析目标 ref 的最新提交
+- 各版本改动说明见 [Releases](https://github.com/shy3130/dsh-quota/releases)（只打 tag + 说明，不打源码包）
+- `pnpm-lock.yaml` 会把 GitHub 依赖钉到具体提交（`codeload.github.com/.../tar.gz/<sha>`），「更新」就是重新解析目标 ref 的最新提交——**与 GitHub Release 无关**，push 到 main 后 `update` 即可拉到
 
 ### 从源码安装（开发）
 
@@ -326,12 +326,13 @@ dsh plugin --profile desktop add link:$(pwd)
 
 ### 发布流程
 
+不需要打源码包，tag 即版本：
+
 ```bash
 npm test
 git add -A && git commit -m "..." && git push
-git tag v1.2.x && git push origin v1.2.x
-git archive --format=tar.gz --prefix=dsh-quota-1.2.x/ -o dsh-quota-1.2.x.tar.gz v1.2.x
-gh release create v1.2.x dsh-quota-1.2.x.tar.gz --notes "..."
+git tag v1.3.x && git push origin v1.3.x
+gh release create v1.3.x --title v1.3.x --notes "..."   # 可选：只写改动说明
 ```
 
 ## 项目结构
