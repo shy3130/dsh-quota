@@ -232,6 +232,22 @@ git clone https://github.com/shy3130/dsh-quota.git ~/Project/dsh-quota
 
 凭据可以放在环境变量里，也可以经 DSH 的凭据服务按上面的名字保存（插件只用引用名，不落盘）。
 
+## 安装与更新（从 GitHub）
+
+插件在 DSH profile 里作为普通依赖安装，宿主本地仓库不参与运行时：
+
+```bash
+# 安装 / 更新到 main 最新提交
+dsh plugin --profile desktop add github:shy3130/dsh-quota
+# 或已装过的常规更新
+dsh plugin --profile desktop update @local/dsh-quota
+```
+
+- 安装/更新后要**完全退出并重开 DSH**（宿主插件在启动时加载；只刷新页面不够）
+- 客户端改动（`client.js`）刷新页面即可，但版本更新涉及宿主时仍需重启
+- `pnpm-lock.yaml` 会把 GitHub 依赖钉到某个提交（`codeload.github.com/.../tar.gz/<sha>`），所以「更新」本质是重新解析 main 的最新提交
+- 想开发调试时再切回本地软链：`dsh plugin --profile desktop add link:/path/to/dsh-quota`（改代码重启即生效）
+
 ## 卸载
 
 删掉 `~/.dsh/cordis.patch.yml` 里对应的 `insert` 行，然后重启 DSH。
