@@ -42,6 +42,7 @@ dsh plugin --profile desktop add github:shy3130/dsh-quota
 - **明细面板** —— 剩余 / 已用 / 重置倒计时（`6d 21h` 紧凑格式）、工具额度分项、柱状 / 环状指示器可切换并记忆
 - **Token 用量统计** —— 今日 / 7 天 / 30 天切换：总量、输入 / 输出、缓存命中率、请求数与每日柱状图，全部本地计算
 - **DeepSeek 费用估算** —— 按官方价目表（区分高峰 / 空闲时段）由本地 token 记录估算金额，不需要官方用量接口
+- **手机端适配** —— 窄屏（≤520px）下徽标自动紧凑（隐藏分隔符、缩短进度条、超宽裁剪），弹层横向铺满并限制高度，触屏点外部关闭
 - **纯插件、零侵入** —— 不修改任何官方源码；标准 DSH bundle，一条命令安装；所有路由带 DSH 登录门
 
 ## 效果图
@@ -62,6 +63,16 @@ dsh plugin --profile desktop add github:shy3130/dsh-quota
 |:---:|:---:|:---:|
 | <img src="docs/images/glm-panel.png" width="230" alt="GLM 明细面板"> | <img src="docs/images/opencode-go-panel.png" width="230" alt="OpenCode Go 明细面板"> | <img src="docs/images/deepseek-panel.png" width="230" alt="DeepSeek 余额与消耗面板"> |
 | 套餐窗口 + 工具额度 + Token 用量 | 5h / 周 / 月三窗 + Token 用量 | 余额（充值 / 赠送）+ 估算费用 |
+
+### 手机端
+
+窄屏自动切换为紧凑布局：徽标收窄不溢出，弹层横向铺满、限高滚动：
+
+| GLM | DeepSeek 官方 |
+|:---:|:---:|
+| <img src="docs/images/mobile-glm.png" width="280" alt="手机端 GLM 面板"> | <img src="docs/images/mobile-deepseek.png" width="280" alt="手机端 DeepSeek 面板"> |
+
+<img src="docs/images/mobile-pill.png" width="480" alt="手机端状态栏徽标（输入框上方）">
 
 ### 环状指示器
 
@@ -193,6 +204,8 @@ dsh plugin --profile desktop remove @local/dsh-quota
 客户端每秒查询一次 `/quota/active`（宿主只读内存，开销可忽略），窗口重新获得焦点时立即查询，另订阅 `settings/document-updated` 事件即时触发；额度数据本身每 60 秒刷新一次。
 
 ### 徽标示意
+
+套餐等级沿用官方命名（面板右上角显示 `套餐 MAX` / `套餐 PRO`，不做翻译）。
 
 ```text
 GLM 5h 21% ▰ · 周 6% ▰                     ← 智谱（zai-coding-cn）

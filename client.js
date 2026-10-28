@@ -220,8 +220,8 @@ window.__ModuleLoader__.load({
       inDuration: '{d}',
     };
 
-    /** 套餐等级的中文名：接口返回 max / pro / lite 这类枚举。 */
-    const LEVEL_ZH = { max: '最高', pro: '专业', lite: '轻量', free: '免费', none: '无' };
+    /** 套餐等级显示名：沿用官方命名（MAX / PRO / LITE / FREE），不做翻译。 */
+    const LEVEL_LABEL = { max: 'MAX', pro: 'PRO', lite: 'LITE', free: 'FREE' };
 
     /** 工具额度的分项名：接口返回 search-prime / web-reader / zread 这类编码。 */
     const TOOL_ZH = {
@@ -236,10 +236,11 @@ window.__ModuleLoader__.load({
     const CSS = [
       '.zq-anchor{flex:none;display:inline-flex;position:relative}',
       '.zq-anchor[data-align=end]{margin-left:auto;order:1}',
-      '.zq-pill{border-radius:var(--dsw-radius-sm);color:var(--dsw-alias-label-tertiary);font:inherit;font-size:calc(var(--dsh-content-font-size-secondary,13px) - 1px);font-variant-numeric:tabular-nums;line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:nowrap;cursor:pointer;background:0 0;border:none;flex:none;align-items:center;gap:6px;padding:1px 8px;display:inline-flex}',
+      '.zq-pill{border-radius:var(--dsw-radius-sm);color:var(--dsw-alias-label-tertiary);font:inherit;font-size:calc(var(--dsh-content-font-size-secondary,13px) - 1px);font-variant-numeric:tabular-nums;line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:nowrap;cursor:pointer;background:0 0;border:none;flex:0 1 auto;min-width:0;max-width:100%;overflow:hidden;align-items:center;gap:6px;padding:1px 8px;display:inline-flex}',
       '.zq-pill:hover,.zq-pill[aria-expanded=true]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}',
       '.zq-pill:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:-2px}',
-      '.zq-part{display:inline-flex;align-items:center;gap:5px}',
+      '.zq-brand{flex:none}',
+      '.zq-part{display:inline-flex;align-items:center;gap:5px;min-width:0}',
       '.zq-bar{flex:none;width:26px;height:5px;border-radius:3px;background:var(--dsw-alias-border-l2,#dde1e7);overflow:hidden;display:inline-block}',
       '.zq-bar-fill{display:block;height:100%;border-radius:3px;min-width:4px}',
       '.zq-sep{color:var(--dsw-alias-separator-primary);margin:0 1px}',
@@ -281,6 +282,14 @@ window.__ModuleLoader__.load({
       '.zp-spark{display:flex;align-items:flex-end;gap:2px;height:18px;margin-top:4px}',
       '.zp-spark i{flex:1;min-height:2px;border-radius:1px;background:var(--dsw-alias-state-business-primary);opacity:.85}',
       '.zp-spark i[data-empty=true]{opacity:.25}',
+      // 手机端（≤520px）：徽标更紧凑、弹层横向铺满并限制高度
+      '@media (max-width:520px){'
+        + '.zq-pill{gap:4px;padding:2px 7px}'
+        + '.zq-part{gap:4px}'
+        + '.zq-bar{width:18px}'
+        + '.zq-sep{display:none}'
+        + '.zp-panel{left:12px;right:12px;width:auto;max-height:min(calc(100vh - 96px),72vh);padding:12px}'
+        + '}',
     ].join('');
 
     /** 记住的指示器形态（无存储时返回 undefined）。 */
@@ -434,11 +443,12 @@ window.__ModuleLoader__.load({
       return t('windowOther');
     }
 
-    /** 套餐等级：中文名优先，未知等级原样显示。 */
+    /** 套餐等级：官方命名优先，未知等级原样显示。 */
     function levelLabel(level) {
       if (typeof level !== 'string' || level.length === 0) return undefined;
-      if (pickLang() === 'zh') return LEVEL_ZH[level.toLowerCase()] ?? level;
-      return level;
+      const key = level.toLowerCase();
+      if (key === 'none') return pickLang() === 'zh' ? '无' : 'none';
+      return LEVEL_LABEL[key] ?? level;
     }
 
     /** 工具分项：中文名优先，未收录的编码原样显示。 */
@@ -843,24 +853,30 @@ window.__ModuleLoader__.load({
         };
       }, []);
 
-      // 面板定位：贴在触发按钮上方，右边缘对齐。
+      // 面板定位：桌面端贴在触发按钮上方、右缘对齐；窄屏（≤520px）左右铺满。
       useEffect(() => {
         if (!open) return undefined;
         const place = () => {
           const el = rootRef.current;
           if (el === null) return;
           const rect = el.getBoundingClientRect();
-          setPos({
-            bottom: Math.max(12, window.innerHeight - rect.top + 8),
-            right: Math.max(12, window.innerWidth - rect.right),
-          });
+          const bottom = Math.max(12, window.innerHeight - rect.top + 8);
+          if (window.innerWidth <= 520) {
+            setPos({ bottom, left: 12, right: 12, width: 'auto' });
+          } else {
+            setPos({ bottom, right: Math.max(12, window.innerWidth - rect.right) });
+          }
         };
         place();
         window.addEventListener('resize', place);
         window.addEventListener('scroll', place, true);
+        const mq = typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 520px)') : null;
+        const onMedia = () => place();
+        if (mq !== null && typeof mq.addEventListener === 'function') mq.addEventListener('change', onMedia);
         return () => {
           window.removeEventListener('resize', place);
           window.removeEventListener('scroll', place, true);
+          if (mq !== null && typeof mq.removeEventListener === 'function') mq.removeEventListener('change', onMedia);
         };
       }, [open]);
 
@@ -876,9 +892,11 @@ window.__ModuleLoader__.load({
           if (event.key === 'Escape') setOpen(false);
         };
         document.addEventListener('mousedown', onDown);
+        document.addEventListener('touchstart', onDown, { passive: true });
         document.addEventListener('keydown', onKey);
         return () => {
           document.removeEventListener('mousedown', onDown);
+          document.removeEventListener('touchstart', onDown);
           document.removeEventListener('keydown', onKey);
         };
       }, [open]);
@@ -940,7 +958,7 @@ window.__ModuleLoader__.load({
               className: 'zp-panel',
               role: 'dialog',
               'aria-label': t(config.titleKey),
-              style: pos === null ? { visibility: 'hidden' } : { bottom: pos.bottom, right: pos.right },
+              style: pos === null ? { visibility: 'hidden' } : pos,
             }, buildPanel(t, useSource, state, indicator, (value) => {
               storeIndicator(value);
               setIndicator(value);
@@ -968,7 +986,7 @@ window.__ModuleLoader__.load({
             if (next) loadTokens(tokenRange);
           },
         }, [
-          h('span', { key: 'brand' }, config.brand),
+          h('span', { key: 'brand', className: 'zq-brand' }, config.brand),
           ...nodes,
         ]),
         panel,
