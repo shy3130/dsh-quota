@@ -663,14 +663,31 @@ export function apply(ctx, config = {}) {
     return { route: source.route, snapshot };
   });
 
-  /** 当前模型选择 → 额度来源。每次切换模型 DSH 都会更新 agentDefaultModel。 */
-  const resolveActive = () => {
+  /**
+   * 当前模型选择 → 额度来源。
+   * 优先用查询参数 provider/model（客户端传来「当前会话」的模型选择，
+   * 切换会话时徽标跟着切）；没有时退回 agentDefaultModel（默认模型）。
+   */
+  const resolveActive = (query) => {
+    let origin = 'default';
     let selection;
-    try {
-      const model = ctx.get('agentDefaultModel');
-      if (model !== undefined && typeof model.currentSelection === 'function') selection = model.currentSelection();
-    } catch {
-      selection = undefined;
+    const params = query instanceof URLSearchParams ? query : new URLSearchParams(typeof query === 'string' ? query : '');
+    const queryProvider = params.get('provider');
+    if (queryProvider !== null && /^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$/.test(queryProvider)) {
+      const queryModel = params.get('model');
+      selection = {
+        provider: queryProvider,
+        model: queryModel !== null && /^[A-Za-z0-9][A-Za-z0-9._/-]{0,120}$/.test(queryModel) ? queryModel : undefined,
+      };
+      origin = 'session';
+    }
+    if (selection === undefined) {
+      try {
+        const model = ctx.get('agentDefaultModel');
+        if (model !== undefined && typeof model.currentSelection === 'function') selection = model.currentSelection();
+      } catch {
+        selection = undefined;
+      }
     }
     const provider = selection !== undefined && typeof selection.provider === 'string' ? selection.provider : undefined;
     const source = provider === undefined ? undefined : PROVIDER_SOURCES[provider];
@@ -679,6 +696,7 @@ export function apply(ctx, config = {}) {
       provider,
       model: selection !== undefined && typeof selection.model === 'string' ? selection.model : undefined,
       source: source ?? null,
+      origin,
     };
   };
 
@@ -716,7 +734,8 @@ export function apply(ctx, config = {}) {
     const conn = connection();
     const rejection = conn !== undefined && typeof conn.requestRejection === 'function' ? conn.requestRejection(req) : fallbackRejection(req);
     if (rejection !== undefined) return send(rejection === 401 ? 401 : rejection, { ok: false, error: rejection === 401 ? 'unauthorized' : 'forbidden' });
-    return send(200, resolveActive());
+    const query = req.url === undefined || req.url.indexOf('?') === -1 ? '' : req.url.slice(req.url.indexOf('?') + 1);
+    return send(200, resolveActive(query));
   };
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',

@@ -193,7 +193,7 @@ dsh plugin --profile desktop remove @local/dsh-quota
 
 ### 自动切换
 
-宿主路由 `GET /quota/active` 读取 DSH 的「当前默认模型选择」（`agentDefaultModel` 服务，每次切换模型都会更新），把 provider 映射到额度来源：
+徽标优先跟随**当前会话的模型**（与输入框模型芯片同源，`modelSelection` 投影的 `next ?? lastUsed`）：打开 / 切换会话、或在会话里换模型，徽标立即切换到对应厂商；新会话没有选择记录时退回「默认模型」（`agentDefaultModel`）。宿主路由 `GET /quota/active` 把 provider 映射到额度来源（客户端可带 `?provider=&model=` 查询参数做会话级覆盖）：
 
 | provider | 来源 | 数据接口 |
 |---|---|---|
@@ -204,7 +204,7 @@ dsh plugin --profile desktop remove @local/dsh-quota
 | `deepseek-account` / `deepseek-api-key` / `deepseek` | DeepSeek 官方 | DSH 账号服务（平台钱包）或 `GET https://api.deepseek.com/user/balance` |
 | 其它 | 无 | 徽标自动隐藏 |
 
-客户端每秒查询一次 `/quota/active`（宿主只读内存，开销可忽略），窗口重新获得焦点时立即查询，另订阅 `settings/document-updated` 事件即时触发；额度数据本身每 60 秒刷新一次。
+客户端每秒查询一次 `/quota/active`（宿主只读内存，开销可忽略），窗口重新获得焦点、会话切换、模型选择保存时都会立即查询；额度数据本身每 60 秒刷新一次。
 
 ### 徽标示意
 

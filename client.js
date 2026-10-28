@@ -760,6 +760,12 @@ window.__ModuleLoader__.load({
 
     function QuotaPill(props) {
       const t = typeof props.t === 'function' ? props.t : fallbackTranslate;
+      // 当前会话的模型选择：与输入框模型芯片同源（modelSelection 投影的 next ?? lastUsed）。
+      // 切换会话时投影快照变化 → sessionProvider 变化 → 徽标跟着切换到对应厂商。
+      const useProjectionHook = typeof props.useProjection === 'function' ? props.useProjection : null;
+      const projection = useProjectionHook !== null ? useProjectionHook('modelSelection') : undefined;
+      const picked = projection !== null && projection !== undefined ? (projection.next ?? projection.lastUsed) : undefined;
+      const sessionProvider = picked !== null && picked !== undefined && typeof picked.provider === 'string' && picked.provider.length > 0 ? picked.provider : null;
       const [state, setState] = useState({ phase: 'loading' });
       const [source, setSource] = useState(null);
       const [indicator, setIndicator] = useState(() => storedIndicator() ?? 'bar');
@@ -775,6 +781,11 @@ window.__ModuleLoader__.load({
       const panelRef = useRef(null);
       const alive = useRef(true);
       const memo = useRef({ source: null, at: 0 });
+      const sessionSelRef = useRef(null);
+      const tickRef = useRef(null);
+      sessionSelRef.current = sessionProvider === null
+        ? null
+        : { provider: sessionProvider, model: typeof picked.model === 'string' ? picked.model : '' };
 
       useEffect(() => {
         alive.current = true;
@@ -793,7 +804,11 @@ window.__ModuleLoader__.load({
         };
         const tick = async () => {
           try {
-            const active = await fetch(ACTIVE_ROUTE, { headers: { accept: 'application/json' }, cache: 'no-store' }).then((res) => res.json());
+            const sel = sessionSelRef.current;
+            const activeUrl = sel === null
+              ? ACTIVE_ROUTE
+              : `${ACTIVE_ROUTE}?provider=${encodeURIComponent(sel.provider)}${sel.model === '' ? '' : `&model=${encodeURIComponent(sel.model)}`}`;
+            const active = await fetch(activeUrl, { headers: { accept: 'application/json' }, cache: 'no-store' }).then((res) => res.json());
             if (!alive.current) return;
             const next = active !== null && active.ok === true && typeof active.source === 'string' ? active.source : null;
             // 来源没变就不动 React 状态，避免每秒重渲染；配额到 55s 才刷新。
@@ -826,6 +841,7 @@ window.__ModuleLoader__.load({
             setState({ phase: 'ready', data: { ok: false, error: 'network' } });
           }
         };
+        tickRef.current = tick;
         const schedule = () => {
           clearInterval(timer);
           timer = setInterval(tick, ACTIVE_POLL_MS);
@@ -852,6 +868,11 @@ window.__ModuleLoader__.load({
           document.removeEventListener('visibilitychange', onVisible);
         };
       }, []);
+
+      // 切换会话（或会话内换模型）时立即查询一次来源，不等下一个轮询周期。
+      useEffect(() => {
+        if (typeof tickRef.current === 'function') tickRef.current();
+      }, [sessionProvider]);
 
       // 面板定位：桌面端贴在触发按钮上方、右缘对齐；窄屏（≤520px）左右铺满。
       useEffect(() => {
