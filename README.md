@@ -51,12 +51,16 @@ GLM 套餐额度                    套餐 最高
 
 ## 安装方式
 
-插件包是标准 DSH bundle。当前安装方式是写进**本机用户补丁层** `~/.dsh/cordis.patch.yml`：
+```bash
+git clone https://github.com/shy3130/dsh-quota.git ~/Project/dsh-quota
+```
+
+插件包是标准 DSH bundle。当前安装方式是写进**本机用户补丁层** `~/.dsh/cordis.patch.yml`（`name` 换成你自己的克隆路径）：
 
 ```yaml
 - insert:
     - id: dsh-quota
-      name: '/Users/shy/Project/dsh-quota/index.js'
+      name: '/Users/<you>/Project/dsh-quota/index.js'
 ```
 
 指向 `index.js`（而不是包目录）：Node 的 ESM 不支持目录导入；客户端模块系统会从该文件向上找到 `package.json`，读取 `dsh.client` 后再加载 `client.js`。
