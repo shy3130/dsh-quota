@@ -84,6 +84,14 @@ window.__ModuleLoader__.load({
         pillKeys: ['h5', 'week'],
         shortLabels: { h5: '5h', week: '周' },
       },
+      deepseek: {
+        route: '/quota/deepseek',
+        brand: 'DeepSeek',
+        pillKeys: ['balance', 'today'],
+        shortLabels: { balance: '余额', today: '今日' },
+        titleKey: 'titleDeepseek',
+        tokenProvider: 'deepseek',
+      },
       xiaomi: {
         route: '/quota/xiaomi',
         brand: '小米',
@@ -135,6 +143,17 @@ window.__ModuleLoader__.load({
       tokensRequests: '{n} 次请求',
       tokensLoading: '统计中…',
       tokensEmpty: '暂无记录',
+      titleDeepseek: 'DeepSeek 余额与消耗',
+      dsBalance: '账户余额',
+      dsTotal: '总余额',
+      dsToppedUp: '充值',
+      dsGranted: '赠送',
+      dsCost: '估算费用',
+      dsTodayCost: '今日消耗',
+      dsNotSignedIn: '未登录 DeepSeek 账号',
+      dsUnavailable: '余额不可用',
+      balanceShort: '余额',
+      todayShort: '今日',
       loadingPanel: '正在获取额度…',
       network: '网络不通',
       http: '接口异常',
@@ -183,6 +202,17 @@ window.__ModuleLoader__.load({
       tokensRequests: '{n} requests',
       tokensLoading: 'counting…',
       tokensEmpty: 'no records',
+      titleDeepseek: 'DeepSeek balance & spend',
+      dsBalance: 'Balance',
+      dsTotal: 'Total',
+      dsToppedUp: 'topped up',
+      dsGranted: 'granted',
+      dsCost: 'est. cost',
+      dsTodayCost: 'today spend',
+      dsNotSignedIn: 'DeepSeek account not signed in',
+      dsUnavailable: 'balance unavailable',
+      balanceShort: 'balance',
+      todayShort: 'today',
       loadingPanel: 'Loading usage…',
       network: 'network error',
       http: 'bad response',
@@ -335,6 +365,19 @@ window.__ModuleLoader__.load({
      * 距离重置还剩多久，用日期时长的短单位（小写 d / h / m）：
      * 「42m」「3h 24m」「6d 21h」；整点省略分钟，整天省略小时，不足 1 分钟 <1m。
      */
+    /** 金额符号：CNY 用 ¥，其它按 USD。 */
+    function currencySymbol(currency) {
+      return currency === 'USD' ? '$' : '¥';
+    }
+
+    /** 金额格式化：两位小数，太小的值显示 <0.01。 */
+    function formatMoney(value, currency) {
+      const amount = Number(value);
+      if (!Number.isFinite(amount)) return '--';
+      if (amount > 0 && amount < 0.005) return `${currencySymbol(currency)}<0.01`;
+      return `${currencySymbol(currency)}${amount.toFixed(2)}`;
+    }
+
     function formatCountdown(t, ms) {
       if (typeof ms !== 'number' || !Number.isFinite(ms)) return undefined;
       const delta = ms - Date.now();
@@ -484,9 +527,12 @@ window.__ModuleLoader__.load({
         return h('section', { key: 'tokens', className: 'zp-tok' }, children);
       }
       const totals = data.totals ?? {};
+      // DeepSeek 过滤时带费用（有官方价格表），主行显示估算金额；其它来源显示 token 总量。
+      const costMode = typeof totals.currency === 'string' && typeof totals.cost === 'number';
+      const metric = (item) => (costMode ? item.cost ?? 0 : item.total ?? 0);
       children.push(h('div', { key: 'total', className: 'zp-tokrow' }, [
-        h('span', { key: 'label' }, t('tokensTotal')),
-        h('span', { key: 'num', className: 'zp-toknum' }, formatCount(totals.total ?? 0)),
+        h('span', { key: 'label' }, costMode ? t('dsCost') : t('tokensTotal')),
+        h('span', { key: 'num', className: 'zp-toknum' }, costMode ? formatMoney(totals.cost ?? 0, totals.currency) : formatCount(totals.total ?? 0)),
       ]));
       const cache = typeof totals.cacheHit === 'number' ? `${t('tokensCache')} ${totals.cacheHit}%` : undefined;
       const sub = [t('tokensInput'), formatCount(totals.input ?? 0), '·', t('tokensOutput'), formatCount(totals.output ?? 0)];
@@ -496,19 +542,79 @@ window.__ModuleLoader__.load({
       const daily = Array.isArray(data.daily) ? data.daily : [];
       if (daily.length > 1) {
         let max = 0;
-        for (const item of daily) max = Math.max(max, item.total ?? 0);
+        for (const item of daily) max = Math.max(max, metric(item));
         children.push(h('div', { key: 'spark', className: 'zp-spark' },
           daily.map((item, index) => h('i', {
             key: `bar-${index}`,
-            'data-empty': (item.total ?? 0) === 0,
-            title: `${item.day} · ${formatCount(item.total ?? 0)}`,
-            style: { height: `${Math.max(8, Math.round(((item.total ?? 0) / (max === 0 ? 1 : max)) * 100))}%` },
+            'data-empty': metric(item) === 0,
+            title: `${item.day} · ${costMode ? formatMoney(item.cost ?? 0, totals.currency) : formatCount(item.total ?? 0)}`,
+            style: { height: `${Math.max(8, Math.round((metric(item) / (max === 0 ? 1 : max)) * 100))}%` },
           }))));
       }
       return h('section', { key: 'tokens', className: 'zp-tok' }, children);
     }
 
+    /** DeepSeek 账户余额区块：总余额 + 充值/赠送分项。 */
+    function BalanceSection(t, data) {
+      if (data === undefined || data.ok !== true || data.signedIn !== true) {
+        const reason = data !== undefined && data.ok === true && data.signedIn === false ? t('dsNotSignedIn') : t('dsUnavailable');
+        return h('section', { key: 'balance', className: 'zp-sec' }, [
+          h('div', { key: 'row', className: 'zp-row' }, [
+            h('span', { key: 'label', className: 'zp-label' }, t('dsBalance')),
+            h('span', { key: 'value', className: 'zp-value' }, reason),
+          ]),
+        ]);
+      }
+      const currency = data.currency ?? 'CNY';
+      return h('section', { key: 'balance', className: 'zp-sec' }, [
+        h('div', { key: 'row', className: 'zp-row' }, [
+          h('span', { key: 'label', className: 'zp-label' }, t('dsTotal')),
+          h('span', { key: 'value', className: 'zp-value' }, formatMoney(data.total, currency)),
+        ]),
+        h('div', { key: 'sub', className: 'zp-sub' }, [
+          h('span', { key: 'topup' }, `${t('dsToppedUp')} `),
+          h('b', { key: 'topup-value' }, formatMoney(data.toppedUp, currency)),
+          h('span', { key: 'sep' }, '·'),
+          h('span', { key: 'grant' }, `${t('dsGranted')} `),
+          h('b', { key: 'grant-value' }, formatMoney(data.granted, currency)),
+        ]),
+      ]);
+    }
+
+    /** DeepSeek 面板：余额 + 消耗（费用/token）+ 区间切换 + 指示器。 */
+    function buildDeepseekPanel(t, state, indicator, onToggle, tokens, tokenRange, onTokenRange) {
+      const data = state.phase === 'ready' ? state.data : undefined;
+      const children = [
+        h('div', { key: 'head', className: 'zp-head' }, [
+          h('span', { key: 'title', className: 'zp-title' }, t('titleDeepseek')),
+        ]),
+        h('hr', { key: 'rule', className: 'zp-rule' }),
+        BalanceSection(t, data),
+      ];
+      if (typeof onTokenRange === 'function') children.push(TokenSection(t, tokens, tokenRange, onTokenRange));
+      if (data !== undefined && typeof data.fetchedAt === 'number') {
+        children.push(h('div', { key: 'foot', className: 'zp-foot' }, [
+          h('span', { key: 'upd' }, `${t('updated')} ${formatClock(data.fetchedAt)}`),
+          h('span', { key: 'hint' }, t('every60')),
+        ]));
+      }
+      if (typeof onToggle === 'function') {
+        const option = (value, labelKey) => h('button', {
+          key: `opt-${value}`,
+          type: 'button',
+          'aria-pressed': indicator === value,
+          onClick: () => onToggle(value),
+        }, t(labelKey));
+        children.push(h('div', { key: 'pref', className: 'zp-pref' }, [
+          h('span', { key: 'label', className: 'zp-pref-label' }, t('indicator')),
+          h('span', { key: 'toggle', className: 'zp-toggle' }, [option('bar', 'indicatorBar'), option('ring', 'indicatorRing')]),
+        ]));
+      }
+      return children;
+    }
+
     function buildPanel(t, source, state, indicator, onToggle, tokens, tokenRange, onTokenRange) {
+      if (source === 'deepseek') return buildDeepseekPanel(t, state, indicator, onToggle, tokens, tokenRange, onTokenRange);
       const config = SOURCES[source];
       const data = state.phase === 'ready' ? state.data : undefined;
       const level = data !== undefined && data.ok === true ? levelLabel(data.level) : undefined;
@@ -606,10 +712,28 @@ window.__ModuleLoader__.load({
       ]);
     }
 
-    /** pill 内文：按来源挑两个窗口显示。 */
-    function buildContent(t, source, state, indicator) {
+    /** pill 内文：按来源挑两个窗口显示（DeepSeek 显示余额 + 今日消耗）。 */
+    function buildContent(t, source, state, indicator, extra) {
       if (state.phase === 'loading') return [h('span', { key: 'load' }, t('loading'))];
       const data = state.data;
+      if (source === 'deepseek') {
+        if (data === undefined || data.ok !== true) return [h('span', { key: 'err' }, t('unavailable'))];
+        if (data.signedIn !== true) return [h('span', { key: 'err' }, t('dsNotSignedIn'))];
+        const currency = data.currency ?? 'CNY';
+        const nodes = [h('span', { key: 'balance', className: 'zq-part' }, [
+          h('span', { key: 'tag' }, t('balanceShort')),
+          h('span', { key: 'num' }, formatMoney(data.total, currency)),
+        ])];
+        const today = extra !== undefined && extra !== null ? extra.dsToday : undefined;
+        if (today !== undefined && today !== null && today.ok === true && typeof today.totals?.cost === 'number') {
+          nodes.push(h('span', { key: 'sep-today', className: 'zq-sep', 'aria-hidden': true }, '·'));
+          nodes.push(h('span', { key: 'today', className: 'zq-part' }, [
+            h('span', { key: 'tag' }, t('todayShort')),
+            h('span', { key: 'num' }, formatMoney(today.totals.cost, today.totals.currency ?? 'CNY')),
+          ]));
+        }
+        return nodes;
+      }
       if (data === undefined || data.ok !== true) {
         const reason = data !== undefined && data.error === 'missing-credential' ? t('noCredential') : t('unavailable');
         return [h('span', { key: 'err' }, reason)];
@@ -634,7 +758,9 @@ window.__ModuleLoader__.load({
       const [pos, setPos] = useState(null);
       const [tokens, setTokens] = useState(undefined);
       const [tokenRange, setTokenRange] = useState('7d');
+      const [dsToday, setDsToday] = useState(undefined);
       const tokenMemo = useRef({ range: null, at: 0 });
+      const dsMemo = useRef({ at: 0 });
       const rootRef = useRef(null);
       const panelRef = useRef(null);
       const alive = useRef(true);
@@ -678,6 +804,7 @@ window.__ModuleLoader__.load({
             }
             // 换了厂商：立刻把旧数据换成新来源的额度（宿主对同一来源还有 55s 缓存）。
             setState({ phase: 'loading' });
+            if (next === 'deepseek') loadDsToday();
             const data = await fetch(SOURCES[next].route, { headers: { accept: 'application/json' }, cache: 'no-store' }).then((res) => res.json());
             if (!alive.current) return;
             memo.current = { source: next, at: Date.now() };
@@ -756,13 +883,28 @@ window.__ModuleLoader__.load({
         };
       }, [open]);
 
+      /** DeepSeek 徽标上的「今日消耗」：只要今日费用，60s 内复用。 */
+      const loadDsToday = async (force = false) => {
+        if (!force && Date.now() - dsMemo.current.at < TOKEN_TTL_MS) return;
+        try {
+          const data = await fetch(`${TOKENS_ROUTE}?range=today&provider=deepseek`, { headers: { accept: 'application/json' }, cache: 'no-store' }).then((res) => (res.status === 404 ? undefined : res.json()));
+          if (!alive.current) return;
+          dsMemo.current = { at: Date.now() };
+          setDsToday(data);
+        } catch {
+          /* 静默失败：徽标只显示余额 */
+        }
+      };
+
       /** 取 Token 统计：同一区间 60s 内复用，失败显示不可用。 */
       const loadTokens = async (range, force = false) => {
         const now = Date.now();
-        if (!force && tokenMemo.current.range === range && now - tokenMemo.current.at < TOKEN_TTL_MS) return;
+        const provider = source === 'deepseek' ? SOURCES.deepseek.tokenProvider : undefined;
+        if (!force && tokenMemo.current.range === range && tokenMemo.current.provider === provider && now - tokenMemo.current.at < TOKEN_TTL_MS) return;
         setTokens((current) => (current !== undefined && current !== null && current.ok === true ? current : undefined));
+        const providerQuery = provider === undefined ? '' : `&provider=${provider}`;
         try {
-          const response = await fetch(`${TOKENS_ROUTE}?range=${encodeURIComponent(range)}`, { headers: { accept: 'application/json' }, cache: 'no-store' });
+          const response = await fetch(`${TOKENS_ROUTE}?range=${encodeURIComponent(range)}${providerQuery}`, { headers: { accept: 'application/json' }, cache: 'no-store' });
           if (response.status === 404) {
             // 旧版宿主还没这条路由：不显示该区块。
             if (alive.current) setTokens({ ok: false, error: 'unsupported' });
@@ -770,7 +912,7 @@ window.__ModuleLoader__.load({
           }
           const data = await response.json();
           if (!alive.current) return;
-          tokenMemo.current = { range, at: Date.now() };
+          tokenMemo.current = { range, provider, at: Date.now() };
           setTokens(data);
         } catch {
           if (!alive.current) return;
@@ -788,7 +930,7 @@ window.__ModuleLoader__.load({
       if (hidden) return null;
       const useSource = source === null ? 'zhipu' : source;
       const config = SOURCES[useSource];
-      const nodes = buildContent(t, useSource, state, indicator);
+      const nodes = buildContent(t, useSource, state, indicator, { dsToday });
       const label = [config.brand, ...flattenText(nodes)].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
       const panel = open && ReactDOM !== null
         ? ReactDOM.createPortal(

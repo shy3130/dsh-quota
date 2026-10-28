@@ -7,6 +7,7 @@ GLM 5h 21% ▰ · 周 6% ▰                 ← 当前模型在智谱（zai-cod
 OpenCode 5h 8% ▰ · 周 3% ▰ · 月 1% ▰         ← 当前模型在 OpenCode Go（opencode-go，三窗口用短标签）
 Kimi 5h 24% ▰ · 周 42% ▰               ← 当前模型在 Kimi For Coding（kimi-coding）
 小米 套餐 12% ▰ · 月 17% ▰             ← 当前模型在小米 Token 套餐（xiaomi-token-plan-*）
+DeepSeek 余额 ¥85.59 · 今日 ¥1.02      ← 当前模型在 DeepSeek 官方（deepseek-account）
 （其它厂商，例如官方 DeepSeek 账号，徽标不占位）
 ```
 
@@ -47,6 +48,45 @@ Token 用量              今日  7天  30天
 - **请求次数**，以及按天的迷你柱状图（今日 1 根，7 天 7 根，30 天 30 根）
 
 数据来自**本机会话日志**（`$DSH_HOME/sessions/**/session*.jsonl.zstd`，逐帧解压后按事件时间归到本地自然日），完全本地计算：不联网、不上传、不落盘新文件。单次扫描 30 个会话约 60~250ms，结果按区间缓存 60 秒。
+
+## DeepSeek 官方监控（余额 + 消耗）
+
+DeepSeek 官方只开放了一个余额接口（`GET https://api.deepseek.com/user/balance`），没有用量接口，所以这里把**余额**和**消耗**分开取：
+
+- **余额**：优先用 DSH 已登录的 DeepSeek 账号（`deepseekAccount` 服务的平台钱包 `get_user_summary`，不需要额外凭据）；没登录时退回官方 API（需要 `DEEPSEEK_API_KEY`）
+- **今日消耗**：由本机会话日志算出 DeepSeek 官方模型的 token，再按官方价格表换算成金额
+
+徽标显示 `DeepSeek 余额 ¥85.59 · 今日 ¥1.02`；点开面板：
+
+```
+DeepSeek 余额与消耗
+──────────────────────────────
+总余额                     ¥85.59
+充值 ¥85.59 · 赠送 ¥0.00
+
+Token 用量        今日  7天  30天
+估算费用                    ¥1.02
+输入 54.3万 · 输出 10.8万 · 缓存 81.9%
+11 次请求
+▁▁▁▁▁▁█
+──────────────────────────────
+更新于 16:09        每 60 秒刷新
+指示器            柱状  环状
+```
+
+### 价格与口径
+
+按官方价目表（元 / 百万 tokens，`deepseek-flash` / `deepseek-v4-pro`）：
+
+| 模型 | 输入（缓存命中） | 输入（未命中） | 输出 |
+|---|---|---|---|
+| `deepseek-flash` | 0.02 / 0.04 | 1 / 2 | 4 / 8 |
+| `deepseek-v4-pro` | 0.15 / 0.30 | 4.5 / 9 | 13.5 / 27 |
+
+- 每档是「空闲 / 高峰」两列：北京时间**工作日 9:00–12:00、14:00–18:00** 为高峰，其余（含周末）为空闲
+- 价格表内置在 `index.js` 的 `DEEPSEEK_PRICING` 里，官方调价时改这里即可
+- 金额是**估算**：按每条请求的 token × 当时时段单价累加；法定节假日按工作日计算，金额会略微偏高
+- 缓存命中率沿用 DSH 口径：`cacheReadTokens / (totalTokens - outputTokens)`
 
 ## 效果图
 
@@ -90,6 +130,7 @@ Token 用量              今日  7天  30天
 | `opencode-go` / `opencode` | OpenCode Go | `GET https://opencode.ai/zen/go/v1/usage` |
 | `kimi-coding` | Kimi For Coding | `GET https://api.kimi.com/coding/v1/usages` |
 | `xiaomi-token-plan-cn` / `-ams` / `-sgp` / `xiaomi` | 小米 Token 套餐 | `GET https://platform.xiaomimimo.com/api/v1/tokenPlan/usage` |
+| `deepseek-account` / `deepseek-api-key` / `deepseek` | DeepSeek 官方 | DSH 账号服务（平台钱包）或 `GET https://api.deepseek.com/user/balance` |
 | 其它（如官方 DeepSeek 账号） | 无 | 徽标自动隐藏 |
 
 切换模型后约 1 秒内跟着切换：客户端每秒查一次 `/quota/active`（宿主只读内存，开销可忽略），窗口重新获得焦点时立即查一次，另外订阅 `settings/document-updated` 事件做即时触发；额度本身每 60 秒刷新一次。
@@ -129,7 +170,8 @@ git clone https://github.com/shy3130/dsh-quota.git ~/Project/dsh-quota
 |---|---|
 | `GET /quota/active` | 当前模型 → `{ provider, model, source }` |
 | `GET /quota/config` | 界面偏好（`{ indicator: 'bar' | 'ring' }`） |
-| `GET /quota/tokens?range=today\|7d\|30d` | Token 用量统计（读本机会话日志聚合） |
+| `GET /quota/tokens?range=today\|7d\|30d[&provider=deepseek]` | Token 用量统计（读本机会话日志聚合，可过滤厂商） |
+| `GET /quota/deepseek` | DeepSeek 官方余额（总余额 / 充值 / 赠送） |
 | `GET /quota/zhipu` | 智谱额度（归一化后） |
 | `GET /quota/opencode` | OpenCode Go 额度（归一化后） |
 | `GET /quota/kimi` | Kimi For Coding 额度（归一化后） |
@@ -186,6 +228,7 @@ git clone https://github.com/shy3130/dsh-quota.git ~/Project/dsh-quota
 | OpenCode Go | `OPENCODE_GO_API_KEY` | OpenCode Zen 后台的 API Key |
 | Kimi For Coding | `KIMI_API_KEY`，或 DSH 里 Kimi 的 OAuth 登录 | 优先读 DSH 凭据记录 `llm-pi-ai/kimi-coding` 的 access token；没有时用 `sk-kimi-...` API Key |
 | 小米 Token 套餐 | `XIAOMI_MIMO_SESSION_COOKIE` | 小米用量接口只认浏览器 SSO **Cookie**（`tp-...` API Key 查不了）：登录 platform.xiaomimimo.com → DevTools → Cookies → 整条复制 |
+| DeepSeek 官方 | 通常不用（DSH 已登录 DeepSeek 账号即可）；否则 `DEEPSEEK_API_KEY` | 账号模式走 DSH 的 `deepseekAccount` 服务；API Key 模式走官方 `GET /user/balance` |
 
 凭据可以放在环境变量里，也可以经 DSH 的凭据服务按上面的名字保存（插件只用引用名，不落盘）。
 

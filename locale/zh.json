@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "套餐额度状态栏",
-    "description": "在输入框下方跟随当前模型显示对应厂商的套餐额度：智谱 GLM、OpenCode Go、Kimi For Coding、小米 Token 套餐；点击可看已用、剩余、重置时间等明细。"
+    "description": "在输入框下方跟随当前模型显示对应厂商的额度：智谱 GLM、OpenCode Go、Kimi For Coding、小米 Token 套餐、DeepSeek 官方账户（余额 + 今日消耗 + token 用量统计，今日/7 天/30 天可切换）。"
   }
 }

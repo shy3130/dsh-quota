@@ -7,6 +7,7 @@
  *   GET /quota/active    当前模型对应的额度来源（跟随模型选择切换）
  *   GET /quota/config    界面偏好（指示器形态：柱状条 bar / 环状条 ring）
  *   GET /quota/tokens    Token 用量统计（今日 / 7 天 / 30 天，读本机会话日志）
+ *   GET /quota/deepseek  DeepSeek 官方余额（DSH 账号服务优先，API Key 兜底）
  *   GET /quota/zhipu     智谱 GLM Coding Plan
  *   GET /quota/opencode  OpenCode Go 订阅
  *
@@ -230,6 +231,9 @@ function normalizeXiaomi(body) {
 
 /** 模型 provider → 额度来源。 */
 const PROVIDER_SOURCES = {
+  'deepseek-account': 'deepseek',
+  'deepseek-api-key': 'deepseek',
+  deepseek: 'deepseek',
   'zai-coding-cn': 'zhipu',
   zai: 'zhipu',
   'opencode-go': 'opencode',
@@ -386,23 +390,47 @@ async function readFileUsageEvents(log) {
   const events = [];
   // 一次记录可能跨 zstd 帧：按帧解压后拼成一个字节流再按行切，末行不完整（可能正在写）先丢掉。
   let pending = '';
+  // 这一行的事件主题模型：模型切换与每次请求都会记一条，用来把 usage 归到 provider/model。
+  let selection;
   const consume = (text, final) => {
     const rows = (pending + text).split('\n');
     pending = final ? '' : rows.pop();
     for (const line of rows) {
-      if (!line.includes('"usage"')) continue;
+      if (!line.includes('"usage"') && !line.includes('"provider"')) continue;
       let event;
       try {
         event = JSON.parse(line);
       } catch {
         continue;
       }
-      const usage = event !== null && typeof event === 'object' ? event.data?.usage : undefined;
-      if (event?.type !== 'assistant/message' || usage === null || typeof usage !== 'object' || typeof event.time !== 'number') continue;
+      if (event === null || typeof event !== 'object') continue;
+      const provider = event.type === 'request/context' ? event.data?.provider
+        : event.type === 'request/header' ? event.data?.header?.config?.provider
+          : event.type === 'model/selection' ? event.data?.provider
+            : undefined;
+      if (typeof provider === 'string') {
+        selection = {
+          provider,
+          model: event.type === 'request/context' ? event.data?.model
+            : event.type === 'request/header' ? event.data?.header?.config?.model
+              : event.data?.model,
+        };
+        continue;
+      }
+      const usage = event.type === 'assistant/message' ? event.data?.usage : undefined;
+      if (usage === null || typeof usage !== 'object' || typeof event.time !== 'number') continue;
       const input = num(usage.inputTokens) ?? 0;
       const output = num(usage.outputTokens) ?? 0;
       const cacheRead = num(usage.cacheReadTokens) ?? 0;
-      events.push({ time: event.time, input, output, cacheRead, total: num(usage.totalTokens) ?? input + output + cacheRead });
+      events.push({
+        time: event.time,
+        provider: selection?.provider,
+        model: selection?.model,
+        input,
+        output,
+        cacheRead,
+        total: num(usage.totalTokens) ?? input + output + cacheRead,
+      });
     }
   };
   for (let index = 0; index < chunks.length; index += 1) consume(chunks[index].toString('utf8'), index === chunks.length - 1);
@@ -411,8 +439,41 @@ async function readFileUsageEvents(log) {
   return events;
 }
 
+/** DeepSeek 官方定价（元 / 百万 tokens）：[空闲时段, 高峰时段]。 */
+const DEEPSEEK_PRICING = {
+  'deepseek-flash': { cacheHit: [0.02, 0.04], cacheMiss: [1, 2], output: [4, 8] },
+  'deepseek-v4-pro': { cacheHit: [0.15, 0.3], cacheMiss: [4.5, 9], output: [13.5, 27] },
+};
+
+/**
+ * 是否高峰时段：北京时间周一至周五 9:00-12:00、14:00-18:00 为高峰（官方口径，
+ * 未扣中国法定节假日——节假日按工作日算会略高估，误差只在半天级）。
+ */
+function isDeepseekPeak(time) {
+  const date = new Date(time + 8 * 3_600_000);
+  const weekday = date.getUTCDay();
+  if (weekday === 0 || weekday === 6) return false;
+  const hour = date.getUTCHours() + date.getUTCMinutes() / 60;
+  return (hour >= 9 && hour < 12) || (hour >= 14 && hour < 18);
+}
+
+/** 单条 usage 的估算费用（元）；未收录的模型返回 undefined。 */
+function deepseekCost(model, event) {
+  const price = model === undefined ? undefined : DEEPSEEK_PRICING[model];
+  if (price === undefined) return undefined;
+  const peak = isDeepseekPeak(event.time) ? 1 : 0;
+  return (event.input * price.cacheMiss[peak] + event.cacheRead * price.cacheHit[peak] + event.output * price.output[peak]) / 1_000_000;
+}
+
+/** 事件是否属于指定 provider（支持前缀：deepseek → deepseek-account / deepseek-api-key）。 */
+function providerMatches(eventProvider, provider) {
+  if (provider === undefined) return true;
+  if (typeof eventProvider !== 'string') return false;
+  return eventProvider === provider || eventProvider.startsWith(`${provider}-`) || provider.startsWith(`${eventProvider}-`);
+}
+
 /** 按区间聚合 Token 用量；导出让测试可以直接调用。 */
-export async function collectTokenUsage({ home, range = '7d', now = Date.now() } = {}) {
+export async function collectTokenUsage({ home, range = '7d', provider, now = Date.now() } = {}) {
   const days = TOKEN_RANGES[range] ?? TOKEN_RANGES['7d'];
   const todayStart = localDayStart(now);
   const from = todayStart - (days - 1) * DAY_MS;
@@ -425,41 +486,52 @@ export async function collectTokenUsage({ home, range = '7d', now = Date.now() }
     scannedFiles += 1;
     for (const event of await readFileUsageEvents(log)) {
       if (event.time < from || event.time > now) continue;
+      if (!providerMatches(event.provider, provider)) continue;
       const key = dayKeyOf(localDayStart(event.time));
-      const bucket = buckets.get(key) ?? { day: key, input: 0, output: 0, cacheRead: 0, total: 0, requests: 0 };
+      const bucket = buckets.get(key) ?? { day: key, input: 0, output: 0, cacheRead: 0, total: 0, requests: 0, cost: 0 };
       bucket.input += event.input;
       bucket.output += event.output;
       bucket.cacheRead += event.cacheRead;
       bucket.total += event.total;
       bucket.requests += 1;
+      const cost = deepseekCost(event.model, event);
+      if (cost !== undefined) bucket.cost += cost;
       buckets.set(key, bucket);
     }
   }
   const daily = [];
   for (let back = days - 1; back >= 0; back -= 1) {
     const key = dayKeyOf(todayStart - back * DAY_MS);
-    daily.push(buckets.get(key) ?? { day: key, input: 0, output: 0, cacheRead: 0, total: 0, requests: 0 });
+    daily.push(buckets.get(key) ?? { day: key, input: 0, output: 0, cacheRead: 0, total: 0, requests: 0, cost: 0 });
   }
-  const totals = { input: 0, output: 0, cacheRead: 0, total: 0, requests: 0 };
+  const totals = { input: 0, output: 0, cacheRead: 0, total: 0, requests: 0, cost: 0 };
   for (const item of daily) {
     totals.input += item.input;
     totals.output += item.output;
     totals.cacheRead += item.cacheRead;
     totals.total += item.total;
     totals.requests += item.requests;
+    totals.cost += item.cost;
   }
   const promptTokens = totals.total - totals.output;
   const cacheHit = promptTokens > 0 ? Math.round((totals.cacheRead / promptTokens) * 1000) / 10 : null;
+  const costKnown = provider !== undefined && totals.cost > 0;
   return {
     ok: true,
     range,
     days,
+    provider,
     from,
     to: now,
     generatedAt: Date.now(),
     scannedFiles,
-    totals: { ...totals, cacheHit },
-    daily,
+    totals: {
+      ...totals,
+      cost: Math.round(totals.cost * 1e4) / 1e4,
+      ...(costKnown ? { currency: 'CNY' } : {}),
+      cacheHit,
+    },
+    daily: daily.map((item) => ({ ...item, cost: Math.round(item.cost * 1e4) / 1e4 })),
   };
 }
 
@@ -682,25 +754,30 @@ export function apply(ctx, config = {}) {
     const rejection = conn !== undefined && typeof conn.requestRejection === 'function' ? conn.requestRejection(req) : fallbackRejection(req);
     if (rejection !== undefined) return send(rejection === 401 ? 401 : rejection, { ok: false, error: rejection === 401 ? 'unauthorized' : 'forbidden' });
     let range = '7d';
+    let provider;
     try {
-      range = new URL(req.url ?? '/', 'http://dsh.invalid').searchParams.get('range') ?? '7d';
+      const query = new URL(req.url ?? '/', 'http://dsh.invalid').searchParams;
+      range = query.get('range') ?? '7d';
+      const raw = query.get('provider');
+      if (raw !== null && /^[a-z0-9-]{1,40}$/i.test(raw)) provider = raw;
     } catch {
       range = '7d';
     }
     if (!Object.prototype.hasOwnProperty.call(TOKEN_RANGES, range)) return send(400, { ok: false, error: 'bad-range' });
+    const cacheKey = `${range}:${provider ?? '*'}`;
     const now = Date.now();
-    const cached = tokenCache.get(range);
+    const cached = tokenCache.get(cacheKey);
     if (cached !== undefined && now - cached.at < TOKEN_CACHE_MS) return send(200, cached.payload);
-    let pending = tokenInflight.get(range);
+    let pending = tokenInflight.get(cacheKey);
     if (pending === undefined) {
-      pending = collectTokenUsage({ home: resolveHome(config), range })
+      pending = collectTokenUsage({ home: resolveHome(config), range, provider })
         .then((payload) => {
-          tokenCache.set(range, { at: Date.now(), payload });
+          tokenCache.set(cacheKey, { at: Date.now(), payload });
           return payload;
         })
         .catch((error) => ({ ok: false, error: 'internal', detail: String(error?.message ?? error) }))
-        .finally(() => tokenInflight.delete(range));
-      tokenInflight.set(range, pending);
+        .finally(() => tokenInflight.delete(cacheKey));
+      tokenInflight.set(cacheKey, pending);
     }
     return send(200, await pending);
   };
@@ -709,4 +786,112 @@ export function apply(ctx, config = {}) {
     path: '/quota/tokens',
     handler: tokenHandler,
   }), 'dsh-quota: /quota/tokens');
+
+  // DeepSeek 官方余额：优先用 DSH 已登录的 DeepSeek 账号（platform get_user_summary），
+  // 没有账号时退回官方 API（GET /user/balance，需要 DEEPSEEK_API_KEY）。
+  const deepseekBalance = async () => {
+    const client = {
+      version: typeof process.env.DSH_CLIENT_VERSION === 'string' && process.env.DSH_CLIENT_VERSION.length > 0 ? process.env.DSH_CLIENT_VERSION : '0.2.1-rc.3',
+      locale: 'zh-CN',
+      timezoneOffsetSeconds: -new Date().getTimezoneOffset() * 60,
+    };
+    let account;
+    try {
+      account = ctx.get('deepseekAccount');
+    } catch {
+      account = undefined;
+    }
+    const base = { fetchedAt: Date.now() };
+    if (account !== undefined && typeof account.getBalance === 'function') {
+      try {
+        let state;
+        try {
+          state = typeof account.getState === 'function' ? await account.getState() : undefined;
+        } catch {
+          state = undefined;
+        }
+        if (state !== undefined && state.status === 'credential-stored') {
+          const result = await account.getBalance(client);
+          if (result !== null && typeof result === 'object' && result.status === 'ready') {
+            const sum = (wallets) => (Array.isArray(wallets) ? wallets : []).reduce((total, wallet) => total + (num(wallet?.balance) ?? 0), 0);
+            const toppedUp = sum(result.value);
+            const granted = sum(result.bonusWallets);
+            const currency = (Array.isArray(result.value) && result.value[0]?.currency) || 'CNY';
+            return { ...base, ok: true, signedIn: true, source: 'account', currency, total: toppedUp + granted, toppedUp, granted, links: state.links };
+          }
+          return { ...base, ok: true, signedIn: true, source: 'account', error: 'balance-failed' };
+        }
+      } catch (error) {
+        return { ...base, ok: false, signedIn: true, source: 'account', error: 'account-failed', detail: String(error?.message ?? error) };
+      }
+    }
+    // API Key 兜底：官方文档 GET /user/balance
+    let key;
+    try {
+      const credentials = ctx.get('credentials');
+      if (credentials !== undefined && typeof credentials.resolve === 'function') {
+        const hit = await credentials.resolve('DEEPSEEK_API_KEY');
+        if (hit !== undefined && typeof hit.value === 'string' && hit.value.length > 0) key = hit.value;
+      }
+    } catch {
+      key = undefined;
+    }
+    if (key === undefined && typeof process.env.DEEPSEEK_API_KEY === 'string' && process.env.DEEPSEEK_API_KEY.length > 0) key = process.env.DEEPSEEK_API_KEY;
+    if (key === undefined) return { ...base, ok: true, signedIn: false };
+    try {
+      const response = await fetch('https://api.deepseek.com/user/balance', {
+        headers: { authorization: `Bearer ${key}`, accept: 'application/json' },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      if (!response.ok) return { ...base, ok: true, signedIn: true, source: 'api-key', error: 'http', status: response.status };
+      const body = await response.json();
+      const info = Array.isArray(body?.balance_infos) ? body.balance_infos[0] : undefined;
+      if (info === undefined) return { ...base, ok: true, signedIn: true, source: 'api-key', error: 'parse' };
+      return {
+        ...base,
+        ok: true,
+        signedIn: true,
+        source: 'api-key',
+        currency: info.currency ?? 'CNY',
+        total: num(info.total_balance) ?? 0,
+        toppedUp: num(info.topped_up_balance) ?? 0,
+        granted: num(info.granted_balance) ?? 0,
+        available: body.is_available === true,
+      };
+    } catch (error) {
+      return { ...base, ok: false, signedIn: true, source: 'api-key', error: 'network', detail: String(error?.message ?? error) };
+    }
+  };
+
+  let deepseekCache;
+  let deepseekInflight;
+  const deepseekHandler = async (req, res) => {
+    const send = (code, payload) => {
+      res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+      res.end(JSON.stringify(payload));
+    };
+    if (req.method !== 'GET') return send(405, { ok: false, error: 'method-not-allowed' });
+    const conn = connection();
+    const rejection = conn !== undefined && typeof conn.requestRejection === 'function' ? conn.requestRejection(req) : fallbackRejection(req);
+    if (rejection !== undefined) return send(rejection === 401 ? 401 : rejection, { ok: false, error: rejection === 401 ? 'unauthorized' : 'forbidden' });
+    const now = Date.now();
+    if (deepseekCache !== undefined && now - deepseekCache.at < CACHE_OK_MS) return send(200, deepseekCache.payload);
+    if (deepseekInflight === undefined) {
+      deepseekInflight = deepseekBalance()
+        .then((payload) => {
+          deepseekCache = { at: Date.now(), payload };
+          return payload;
+        })
+        .catch((error) => ({ ok: false, error: 'internal', detail: String(error?.message ?? error) }))
+        .finally(() => {
+          deepseekInflight = undefined;
+        });
+    }
+    return send(200, await deepseekInflight);
+  };
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: '/quota/deepseek',
+    handler: deepseekHandler,
+  }), 'dsh-quota: /quota/deepseek');
 }

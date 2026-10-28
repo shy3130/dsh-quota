@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Plan quota statusline",
-    "description": "Shows the quota of the provider behind the current model under the composer: Zhipu GLM, OpenCode Go, Kimi For Coding and Xiaomi Token Plan. Click for used, remaining and reset details."
+    "description": "Shows the current model provider’s quota in the composer dock: Zhipu GLM, OpenCode Go, Kimi For Coding, Xiaomi Token Plan, and DeepSeek (balance, today’s spend, and token usage with today / 7-day / 30-day ranges)."
   }
 }
