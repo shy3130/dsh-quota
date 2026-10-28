@@ -1,8 +1,8 @@
 {
   "name": "@local/dsh-quota",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "private": true,
-  "description": "在输入框下方跟随当前模型显示对应厂商的套餐额度：智谱 GLM（5 小时 / 本周 / 工具额度）与 OpenCode Go（5 小时 / 本周 / 本月）；可扩展更多厂商。",
+  "description": "DeepSeek Harness 状态栏多厂商额度监控插件：智谱 GLM、OpenCode Go、Kimi、小米 Token 套餐、DeepSeek 官方（余额 + 消耗估算），附今日/7天/30天 Token 用量统计。",
   "type": "module",
   "exports": {
     ".": "./index.js",
@@ -49,7 +49,12 @@
     "dsh-plugin",
     "quota",
     "statusline",
+    "token-usage",
     "glm",
-    "opencode"
-  ]
+    "opencode",
+    "kimi",
+    "xiaomi",
+    "deepseek"
+  ],
+  "license": "MIT"
 }
