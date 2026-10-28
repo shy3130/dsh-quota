@@ -3,10 +3,10 @@
 在 DeepSeek Harness 输入框下方的状态栏（`conversation.composer.dock`）显示**当前模型所属厂商的套餐额度**，并随模型切换自动切换。
 
 ```
-GLM 5小时 21% ▰ · 本周 6% ▰            ← 当前模型在智谱（zai-coding-cn）
+GLM 5h 21% ▰ · 周 6% ▰                 ← 当前模型在智谱（zai-coding-cn）
 OpenCode 5h 8% ▰ · 周 3% ▰ · 月 1% ▰         ← 当前模型在 OpenCode Go（opencode-go，三窗口用短标签）
-Kimi 5小时 24% ▰ · 本周 42% ▰          ← 当前模型在 Kimi For Coding（kimi-coding）
-小米 套餐 12% ▰ · 本月 17% ▰           ← 当前模型在小米 Token 套餐（xiaomi-token-plan-*）
+Kimi 5h 24% ▰ · 周 42% ▰               ← 当前模型在 Kimi For Coding（kimi-coding）
+小米 套餐 12% ▰ · 月 17% ▰             ← 当前模型在小米 Token 套餐（xiaomi-token-plan-*）
 （其它厂商，例如官方 DeepSeek 账号，徽标不占位）
 ```
 
@@ -54,6 +54,7 @@ GLM 套餐额度                    套餐 最高
 - 小米窗口：`usage.items` 的 `plan_total_token`（套餐）、`compensation_total_token`（补偿，仅有额度时显示）、`monthUsage.items` 的 `month_total_token`（本月总量）；接口给的是 token 数，百分比由 used/limit 计算。
 - 重置倒计时用短单位、小写：`3h 12m`、`6d 21h`，整点省略分钟、整天省略小时、不足 1 分钟 `<1m`。
 - 徽标内文字统一 12px / 同色 / 400 字重（与官方统计徽标同规格），进度条放在数字后面：常态绿、≥70% 琥珀、≥90% 红，轨道同色 18% 浅染。
+- 徽标里窗口名用短标签（`5h` / `周` / `月`，面板里仍是完整标题），来源配置见 `client.js` 的 `SOURCES[*].shortLabels`。
 
 ## 安装方式
 

@@ -48,6 +48,7 @@ window.__ModuleLoader__.load({
         brand: 'GLM',
         titleKey: 'titleZhipu',
         pillKeys: ['h5', 'week'],
+        shortLabels: { h5: '5h', week: '周' },
       },
       opencode: {
         route: '/quota/opencode',
@@ -62,12 +63,14 @@ window.__ModuleLoader__.load({
         brand: 'Kimi',
         titleKey: 'titleKimi',
         pillKeys: ['h5', 'week'],
+        shortLabels: { h5: '5h', week: '周' },
       },
       xiaomi: {
         route: '/quota/xiaomi',
         brand: '小米',
         titleKey: 'titleXiaomi',
         pillKeys: ['plan', 'month'],
+        shortLabels: { plan: '套餐', month: '月' },
       },
     };
 
