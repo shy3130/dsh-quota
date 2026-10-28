@@ -4,7 +4,7 @@
 
 ```
 GLM 5小时 21% ▰ · 本周 6% ▰            ← 当前模型在智谱（zai-coding-cn）
-OpenCode 5小时 8% ▰ · 本周 3% ▰ · 本月 1% ▰   ← 当前模型在 OpenCode Go（opencode-go）
+OpenCode 5h 8% ▰ · 周 3% ▰ · 月 1% ▰         ← 当前模型在 OpenCode Go（opencode-go，三窗口用短标签）
 Kimi 5小时 24% ▰ · 本周 42% ▰          ← 当前模型在 Kimi For Coding（kimi-coding）
 小米 套餐 12% ▰ · 本月 17% ▰           ← 当前模型在小米 Token 套餐（xiaomi-token-plan-*）
 （其它厂商，例如官方 DeepSeek 账号，徽标不占位）
@@ -49,7 +49,7 @@ GLM 套餐额度                    套餐 最高
 
 - 两个接口返回的都是**已用百分比**。智谱的 `TIME_LIMIT` 同时给 `696/4000` 与 `percentage: 17`，可证 `percentage` = 已用；OpenCode 的 `rolling/weekly/monthly` 同理。面板里同时给「剩余」。
 - 智谱窗口：`TOKENS_LIMIT(unit=3,number=5)` → 5 小时、`TOKENS_LIMIT(unit=6)` → 本周、`TIME_LIMIT` → 本月工具额度（含分项）。
-- OpenCode 窗口：`rolling` → **5 小时**（官方文档：5-hour = 月额度的 20%）、`weekly` → 本周（50%）、`monthly` → 本月（100%）；三个都显示在徽标上（智谱是 5 小时 + 本周两个，工具额度在面板里）。
+- OpenCode 窗口：`rolling` → **5 小时**（官方文档：5-hour = 月额度的 20%）、`weekly` → 本周（50%）、`monthly` → 本月（100%）；三个都显示在徽标上，徽标里用短标签 `5h / 周 / 月`（面板里仍是完整标题）。
 - Kimi 窗口：`usage` → 本周汇总，`limits[]` 里 `window.duration=300 MINUTE` 的是 5 小时窗口；token 数用「万 / 亿」紧凑显示。
 - 小米窗口：`usage.items` 的 `plan_total_token`（套餐）、`compensation_total_token`（补偿，仅有额度时显示）、`monthUsage.items` 的 `month_total_token`（本月总量）；接口给的是 token 数，百分比由 used/limit 计算。
 - 重置倒计时用短单位、小写：`3h 12m`、`6d 21h`，整点省略分钟、整天省略小时、不足 1 分钟 `<1m`。

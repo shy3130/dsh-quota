@@ -54,6 +54,8 @@ window.__ModuleLoader__.load({
         brand: 'OpenCode',
         titleKey: 'titleOpencode',
         pillKeys: ['rolling', 'week', 'month'],
+        /** 三个窗口挤在徽标里，用最短标签：5h / 周 / 月。 */
+        shortLabels: { rolling: '5h', week: '周', month: '月' },
       },
       kimi: {
         route: '/quota/kimi',
@@ -399,10 +401,11 @@ window.__ModuleLoader__.load({
     }
 
     /** 一个额度窗口片段：标签 + 已用百分比 + 进度条（条在数字后面，填充=已用）。 */
-    function Segment(t, win) {
+    function Segment(t, win, shortLabels) {
       const percent = typeof win.percent === 'number' ? Math.max(0, Math.min(100, win.percent)) : undefined;
+      const label = shortLabels !== undefined && shortLabels[win.key] !== undefined ? shortLabels[win.key] : winLabel(t, win.key);
       return h('span', { key: `seg-${win.key}`, className: 'zq-part' }, [
-        h('span', { key: 'tag' }, winLabel(t, win.key)),
+        h('span', { key: 'tag' }, label),
         h('span', { key: 'num' }, `${win.percent ?? '--'}%`),
         h('span', { key: 'bar', className: 'zq-bar', role: 'presentation', 'aria-hidden': true, style: { background: trackColor(percent) } },
           percent !== undefined && percent > 0
@@ -424,7 +427,7 @@ window.__ModuleLoader__.load({
       const nodes = [];
       windows.forEach((win, index) => {
         if (index > 0) nodes.push(h('span', { key: `sep-${win.key}`, className: 'zq-sep', 'aria-hidden': true }, '·'));
-        nodes.push(Segment(t, win));
+        nodes.push(Segment(t, win, config.shortLabels));
       });
       return nodes;
     }
