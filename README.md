@@ -43,7 +43,7 @@ GLM 套餐额度                    套餐 最高
 | `xiaomi-token-plan-cn` / `-ams` / `-sgp` / `xiaomi` | 小米 Token 套餐 | `GET https://platform.xiaomimimo.com/api/v1/tokenPlan/usage` |
 | 其它（如官方 DeepSeek 账号） | 无 | 徽标自动隐藏 |
 
-切换模型后，徽标最多 15 秒内跟着切换（宿主只读内存，轮询很便宜）；额度本身每 60 秒刷新一次。
+切换模型后约 1 秒内跟着切换：客户端每秒查一次 `/quota/active`（宿主只读内存，开销可忽略），窗口重新获得焦点时立即查一次，另外订阅 `settings/document-updated` 事件做即时触发；额度本身每 60 秒刷新一次。
 
 ## 数据与语义
 

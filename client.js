@@ -29,8 +29,20 @@ window.__ModuleLoader__.load({
 
     const NS = '@local/dsh-quota';
     const ACTIVE_ROUTE = '/quota/active';
-    /** 检查当前模型所属厂商的间隔：便宜（宿主只读内存），快一点以便及时切换。 */
-    const ACTIVE_POLL_MS = 15_000;
+    /** 当前模型所属厂商的检查间隔：宿主只读内存，1s 一次开销可忽略。 */
+    const ACTIVE_POLL_MS = 1_000;
+
+    /** 设置文档变化（含模型选择保存）→ 通知所有徽标立刻重新取数。 */
+    const refreshListeners = new Set();
+    function notifyRefresh() {
+      for (const listener of refreshListeners) {
+        try {
+          listener();
+        } catch {
+          /* 单个监听器失败不影响其他实例 */
+        }
+      }
+    }
     /** 同一来源的额度刷新间隔（宿主侧还有 55s 缓存）。 */
     const QUOTA_TTL_MS = 55_000;
 
@@ -450,25 +462,37 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         alive.current = true;
         let timer;
+        const lastSource = { current: undefined };
         const tick = async () => {
           try {
             const active = await fetch(ACTIVE_ROUTE, { headers: { accept: 'application/json' }, cache: 'no-store' }).then((res) => res.json());
             if (!alive.current) return;
             const next = active !== null && active.ok === true && typeof active.source === 'string' ? active.source : null;
+            // 来源没变就不动 React 状态，避免每秒重渲染；配额到 55s 才刷新。
+            if (next === lastSource.current) {
+              if (next === null || Date.now() - memo.current.at <= QUOTA_TTL_MS) return;
+              const data = await fetch(SOURCES[next].route, { headers: { accept: 'application/json' }, cache: 'no-store' }).then((res) => res.json());
+              if (!alive.current) return;
+              memo.current = { source: next, at: Date.now() };
+              setState({ phase: 'ready', data });
+              return;
+            }
+            lastSource.current = next;
             setSource(next);
             setHidden(next === null);
             if (next === null) {
               setState({ phase: 'hidden' });
               return;
             }
-            const stale = memo.current.source !== next || Date.now() - memo.current.at > QUOTA_TTL_MS;
-            if (!stale) return;
+            // 换了厂商：立刻把旧数据换成新来源的额度（宿主对同一来源还有 55s 缓存）。
+            setState({ phase: 'loading' });
             const data = await fetch(SOURCES[next].route, { headers: { accept: 'application/json' }, cache: 'no-store' }).then((res) => res.json());
             if (!alive.current) return;
             memo.current = { source: next, at: Date.now() };
             setState({ phase: 'ready', data });
           } catch {
             if (!alive.current) return;
+            lastSource.current = null;
             memo.current = { source: null, at: 0 };
             setState({ phase: 'ready', data: { ok: false, error: 'network' } });
           }
@@ -486,9 +510,15 @@ window.__ModuleLoader__.load({
         tick();
         schedule();
         document.addEventListener('visibilitychange', onVisible);
+        // 模型选择一保存就立刻重新取数，不等下一次轮询。
+        const trigger = () => {
+          if (document.visibilityState !== 'hidden') tick();
+        };
+        refreshListeners.add(trigger);
         return () => {
           alive.current = false;
           clearInterval(timer);
+          refreshListeners.delete(trigger);
           document.removeEventListener('visibilitychange', onVisible);
         };
       }, []);
@@ -581,6 +611,26 @@ window.__ModuleLoader__.load({
         const t = ctx.locale !== undefined && typeof ctx.locale.bind === 'function' ? ctx.locale.bind(NS) : fallbackTranslate;
         if (ctx.locale !== undefined && typeof ctx.locale.register === 'function') {
           ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-quota: 词典');
+        }
+        // 订阅设置文档更新（模型选择保存会走这条链路），做 120ms 去抖。
+        let remote;
+        try {
+          remote = typeof ctx.get === 'function' ? ctx.get('remote') : ctx.remote;
+        } catch {
+          remote = undefined;
+        }
+        if (remote !== undefined && typeof remote.$on === 'function') {
+          ctx.effect(() => {
+            let debounce;
+            const off = remote.$on('settings/document-updated', () => {
+              clearTimeout(debounce);
+              debounce = setTimeout(notifyRefresh, 120);
+            });
+            return () => {
+              clearTimeout(debounce);
+              if (typeof off === 'function') off();
+            };
+          }, 'dsh-quota: 设置变更刷新');
         }
         const reg = () => ctx.slots.register({
           name: 'conversation.composer.dock',
