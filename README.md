@@ -79,6 +79,7 @@ git clone https://github.com/shy3130/dsh-quota.git ~/Project/dsh-quota
 | 路由 | 用途 |
 |---|---|
 | `GET /quota/active` | 当前模型 → `{ provider, model, source }` |
+| `GET /quota/config` | 界面偏好（`{ indicator: 'bar' | 'ring' }`） |
 | `GET /quota/zhipu` | 智谱额度（归一化后） |
 | `GET /quota/opencode` | OpenCode Go 额度（归一化后） |
 | `GET /quota/kimi` | Kimi For Coding 额度（归一化后） |
@@ -109,6 +110,23 @@ git clone https://github.com/shy3130/dsh-quota.git ~/Project/dsh-quota
             baseUrl: 'https://platform.xiaomimimo.com'
             credentialRef: 'XIAOMI_MIMO_SESSION_COOKIE'
 ```
+
+### 指示器形态（柱状条 / 环状条）
+
+打开面板，底部有一行「指示器：柱状 / 环状」的切换：
+
+- 点击即切换，选择记在浏览器 `localStorage`（键 `dsh-quota:indicator`），刷新后保持
+- 想改**默认值**（没点过切换的新环境）：给插件行加 `config`：
+
+```yaml
+- insert:
+    - id: dsh-quota
+      name: '@local/dsh-quota'
+      config:
+        indicator: ring   # bar（默认）| ring
+```
+
+> `/quota/config` 是宿主侧路由，改默认值需要**重启**；面板里的切换只需要刷新页面。
 
 ### 各家凭据从哪来
 

@@ -29,6 +29,9 @@ window.__ModuleLoader__.load({
 
     const NS = '@local/dsh-quota';
     const ACTIVE_ROUTE = '/quota/active';
+    const CONFIG_ROUTE = '/quota/config';
+    /** 指示器形态偏好存本地：柱状条 / 环状条。 */
+    const INDICATOR_KEY = 'dsh-quota:indicator';
     /** 当前模型所属厂商的检查间隔：宿主只读内存，1s 一次开销可忽略。 */
     const ACTIVE_POLL_MS = 1_000;
 
@@ -114,6 +117,9 @@ window.__ModuleLoader__.load({
       plan: '套餐',
       updated: '更新于',
       every60: '每 60 秒刷新',
+      indicator: '指示器',
+      indicatorBar: '柱状',
+      indicatorRing: '环状',
       loadingPanel: '正在获取额度…',
       network: '网络不通',
       http: '接口异常',
@@ -148,6 +154,9 @@ window.__ModuleLoader__.load({
       plan: 'Plan',
       updated: 'updated',
       every60: 'refreshes every 60s',
+      indicator: 'Indicator',
+      indicatorBar: 'Bars',
+      indicatorRing: 'Rings',
       loadingPanel: 'Loading usage…',
       network: 'network error',
       http: 'bad response',
@@ -196,7 +205,32 @@ window.__ModuleLoader__.load({
       '.zp-detail{margin:3px 0 0;color:var(--dsw-alias-label-tertiary);display:flex;flex-wrap:wrap;gap:2px 8px;font-variant-numeric:tabular-nums}',
       '.zp-foot{border-top:.5px solid var(--dsw-alias-border-l1);margin-top:8px;padding-top:6px;font-size:11px;line-height:16px;color:var(--dsw-alias-label-caption,#8a8f98);display:flex;justify-content:space-between;gap:8px}',
       '.zp-empty{color:var(--dsw-alias-label-tertiary)}',
+      '.zq-ring{display:inline-flex;flex:none;line-height:0}',
+      '.zp-pref{border-top:.5px solid var(--dsw-alias-border-l1);margin-top:6px;padding-top:6px;align-items:center;justify-content:space-between;display:flex;gap:8px}',
+      '.zp-pref-label{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px}',
+      '.zp-toggle{display:inline-flex;align-items:center;gap:2px}',
+      '.zp-toggle button{font:inherit;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);background:0 0;border:0;border-radius:var(--dsw-radius-sm);padding:1px 6px;cursor:pointer}',
+      '.zp-toggle button:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+      '.zp-toggle button[aria-pressed=true]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}',
     ].join('');
+
+    /** 记住的指示器形态（无存储时返回 undefined）。 */
+    function storedIndicator() {
+      try {
+        const value = typeof localStorage !== 'undefined' ? localStorage.getItem(INDICATOR_KEY) : null;
+        return value === 'bar' || value === 'ring' ? value : undefined;
+      } catch {
+        return undefined;
+      }
+    }
+
+    function storeIndicator(value) {
+      try {
+        if (typeof localStorage !== 'undefined') localStorage.setItem(INDICATOR_KEY, value);
+      } catch {
+        /* 隐私模式下忽略 */
+      }
+    }
 
     /** 按当前界面语言取词典。 */
     function pickLang() {
@@ -382,7 +416,7 @@ window.__ModuleLoader__.load({
     }
 
     /** 面板内容：标题 + 套餐等级 + 各额度区块 + 更新时间。 */
-    function buildPanel(t, source, state) {
+    function buildPanel(t, source, state, indicator, onToggle) {
       const config = SOURCES[source];
       const data = state.phase === 'ready' ? state.data : undefined;
       const level = data !== undefined && data.ok === true ? levelLabel(data.level) : undefined;
@@ -412,25 +446,62 @@ window.__ModuleLoader__.load({
         h('span', { key: 'upd' }, `${t('updated')} ${formatClock(data.fetchedAt)}`),
         h('span', { key: 'hint' }, t('every60')),
       ]));
+      if (typeof onToggle === 'function') {
+        const option = (value, labelKey) => h('button', {
+          key: `opt-${value}`,
+          type: 'button',
+          'aria-pressed': indicator === value,
+          onClick: () => onToggle(value),
+        }, t(labelKey));
+        children.push(h('div', { key: 'pref', className: 'zp-pref' }, [
+          h('span', { key: 'label', className: 'zp-pref-label' }, t('indicator')),
+          h('span', { key: 'toggle', className: 'zp-toggle' }, [option('bar', 'indicatorBar'), option('ring', 'indicatorRing')]),
+        ]));
+      }
       return children;
     }
 
-    /** 一个额度窗口片段：标签 + 已用百分比 + 进度条（条在数字后面，填充=已用）。 */
-    function Segment(t, win, shortLabels) {
+    /** 环状指示器：12px 小环，弧长 = 已用百分比。 */
+    function Ring(t, percent) {
+      const value = typeof percent === 'number' ? Math.max(0, Math.min(100, percent)) : 0;
+      const circumference = 2 * Math.PI * 5;
+      return h('span', { key: 'ring', className: 'zq-ring', role: 'presentation', 'aria-hidden': true },
+        h('svg', { key: 'svg', width: 12, height: 12, viewBox: '0 0 12 12' }, [
+          h('circle', { key: 'track', cx: 6, cy: 6, r: 5, fill: 'none', stroke: trackColor(percent), strokeWidth: 2 }),
+          h('circle', {
+            key: 'fill',
+            cx: 6,
+            cy: 6,
+            r: 5,
+            fill: 'none',
+            stroke: barColor(percent),
+            strokeWidth: 2,
+            strokeLinecap: 'round',
+            strokeDasharray: `${(circumference * value) / 100} ${circumference}`,
+            transform: 'rotate(-90 6 6)',
+          }),
+        ]));
+    }
+
+    /** 一个额度窗口片段：标签 + 已用百分比 + 指示器（柱状条或环状条，在数字后面）。 */
+    function Segment(t, win, shortLabels, indicator) {
       const percent = typeof win.percent === 'number' ? Math.max(0, Math.min(100, win.percent)) : undefined;
       const label = shortLabels !== undefined && shortLabels[win.key] !== undefined ? shortLabels[win.key] : winLabel(t, win.key);
+      const meter = indicator === 'ring'
+        ? Ring(t, percent)
+        : h('span', { key: 'bar', className: 'zq-bar', role: 'presentation', 'aria-hidden': true, style: { background: trackColor(percent) } },
+            percent !== undefined && percent > 0
+              ? h('span', { key: 'fill', className: 'zq-bar-fill', style: { width: `${percent}%`, background: barColor(percent) } })
+              : null);
       return h('span', { key: `seg-${win.key}`, className: 'zq-part' }, [
         h('span', { key: 'tag' }, label),
         h('span', { key: 'num' }, `${win.percent ?? '--'}%`),
-        h('span', { key: 'bar', className: 'zq-bar', role: 'presentation', 'aria-hidden': true, style: { background: trackColor(percent) } },
-          percent !== undefined && percent > 0
-            ? h('span', { key: 'fill', className: 'zq-bar-fill', style: { width: `${percent}%`, background: barColor(percent) } })
-            : null),
+        meter,
       ]);
     }
 
     /** pill 内文：按来源挑两个窗口显示。 */
-    function buildContent(t, source, state) {
+    function buildContent(t, source, state, indicator) {
       if (state.phase === 'loading') return [h('span', { key: 'load' }, t('loading'))];
       const data = state.data;
       if (data === undefined || data.ok !== true) {
@@ -442,7 +513,7 @@ window.__ModuleLoader__.load({
       const nodes = [];
       windows.forEach((win, index) => {
         if (index > 0) nodes.push(h('span', { key: `sep-${win.key}`, className: 'zq-sep', 'aria-hidden': true }, '·'));
-        nodes.push(Segment(t, win, config.shortLabels));
+        nodes.push(Segment(t, win, config.shortLabels, indicator));
       });
       return nodes;
     }
@@ -451,6 +522,7 @@ window.__ModuleLoader__.load({
       const t = typeof props.t === 'function' ? props.t : fallbackTranslate;
       const [state, setState] = useState({ phase: 'loading' });
       const [source, setSource] = useState(null);
+      const [indicator, setIndicator] = useState(() => storedIndicator() ?? 'bar');
       const [hidden, setHidden] = useState(false);
       const [open, setOpen] = useState(false);
       const [pos, setPos] = useState(null);
@@ -463,6 +535,17 @@ window.__ModuleLoader__.load({
         alive.current = true;
         let timer;
         const lastSource = { current: undefined };
+        const configTick = async () => {
+          try {
+            const config = await fetch(CONFIG_ROUTE, { headers: { accept: 'application/json' }, cache: 'no-store' }).then((res) => res.json());
+            if (!alive.current) return;
+            if (config !== null && config.ok === true && (config.indicator === 'bar' || config.indicator === 'ring') && storedIndicator() === undefined) {
+              setIndicator(config.indicator);
+            }
+          } catch {
+            /* 宿主未注册该路由（旧版本）时保持默认 */
+          }
+        };
         const tick = async () => {
           try {
             const active = await fetch(ACTIVE_ROUTE, { headers: { accept: 'application/json' }, cache: 'no-store' }).then((res) => res.json());
@@ -507,6 +590,7 @@ window.__ModuleLoader__.load({
             schedule();
           }
         };
+        configTick();
         tick();
         schedule();
         document.addEventListener('visibilitychange', onVisible);
@@ -567,7 +651,7 @@ window.__ModuleLoader__.load({
       if (hidden) return null;
       const useSource = source === null ? 'zhipu' : source;
       const config = SOURCES[useSource];
-      const nodes = buildContent(t, useSource, state);
+      const nodes = buildContent(t, useSource, state, indicator);
       const label = [config.brand, ...flattenText(nodes)].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
       const panel = open && ReactDOM !== null
         ? ReactDOM.createPortal(
@@ -578,7 +662,10 @@ window.__ModuleLoader__.load({
               role: 'dialog',
               'aria-label': t(config.titleKey),
               style: pos === null ? { visibility: 'hidden' } : { bottom: pos.bottom, right: pos.right },
-            }, buildPanel(t, useSource, state)),
+            }, buildPanel(t, useSource, state, indicator, (value) => {
+              storeIndicator(value);
+              setIndicator(value);
+            })),
             document.body,
           )
         : null;

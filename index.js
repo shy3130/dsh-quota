@@ -5,6 +5,7 @@
  * 它轮询本插件在 DSH webServer 上挂的两个路由取数：
  *
  *   GET /quota/active    当前模型对应的额度来源（跟随模型选择切换）
+ *   GET /quota/config    界面偏好（指示器形态：柱状条 bar / 环状条 ring）
  *   GET /quota/zhipu     智谱 GLM Coding Plan
  *   GET /quota/opencode  OpenCode Go 订阅
  *
@@ -464,4 +465,23 @@ export function apply(ctx, config = {}) {
     path: '/quota/active',
     handler: activeHandler,
   }), 'dsh-quota: /quota/active');
+
+  // 界面偏好：插件行 config.indicator 可设默认值（bar | ring），客户端可在面板里临时切换。
+  const indicator = config.indicator === 'ring' ? 'ring' : 'bar';
+  const configHandler = (req, res) => {
+    const send = (code, payload) => {
+      res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+      res.end(JSON.stringify(payload));
+    };
+    if (req.method !== 'GET') return send(405, { ok: false, error: 'method-not-allowed' });
+    const conn = connection();
+    const rejection = conn !== undefined && typeof conn.requestRejection === 'function' ? conn.requestRejection(req) : fallbackRejection(req);
+    if (rejection !== undefined) return send(rejection === 401 ? 401 : rejection, { ok: false, error: rejection === 401 ? 'unauthorized' : 'forbidden' });
+    return send(200, { ok: true, indicator });
+  };
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: '/quota/config',
+    handler: configHandler,
+  }), 'dsh-quota: /quota/config');
 }
