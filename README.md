@@ -8,9 +8,10 @@
 
 智谱 GLM · OpenCode Go · Kimi For Coding · 小米 Token 套餐 · DeepSeek 官方
 
+<!-- 客户端兼容性：升级 DSH 后请同步更新本徽章与「环境要求」中的实测版本（dsh --version 可查） -->
 [![release](https://img.shields.io/github/v/release/shy3130/dsh-quota?style=flat-square&label=release)](https://github.com/shy3130/dsh-quota/releases)
 [![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
-[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek_Harness-%E2%89%A5_0.2-4D6BFE?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
+[![DeepSeek Harness](https://img.shields.io/badge/client-0.2.1--rc.3-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness/releases)
 [![platform](https://img.shields.io/badge/platform-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-lightgrey?style=flat-square)](#)
 [![code size](https://img.shields.io/github/languages/code-size/shy3130/dsh-quota?style=flat-square)](#)
 
@@ -88,9 +89,11 @@ dsh plugin --profile desktop add github:shy3130/dsh-quota
 
 | 依赖 | 要求 |
 |---|---|
-| [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | ≥ 0.2（预览版） |
+| [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | **0.2.1-rc.3**（RC 预览版，实测版本；≥ 0.2 理论兼容） |
 | Node.js | 无需单独安装（使用 DSH 宿主自带运行时） |
 | 凭据 | 对应厂商的 API Key / Cookie，见[配置](#配置) |
+
+> **客户端版本**：本插件在 **DeepSeek Harness 0.2.1-rc.3**（桌面端 RC 版）开发与实测。DSH 处于 RC/预览阶段、接口迭代较快，升级客户端后如遇徽标不显示或面板异常，请到 [Issues](https://github.com/shy3130/dsh-quota/issues) 附上 `dsh --version` 反馈。
 
 ### 从 GitHub 安装（推荐）
 
