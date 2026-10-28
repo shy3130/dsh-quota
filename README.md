@@ -1,43 +1,62 @@
 # dsh-quota
 
-在 DeepSeek Harness 输入框下方的状态栏（`conversation.composer.dock`）显示**当前模型所属厂商的套餐额度**，并随模型切换自动切换。
+在 DeepSeek Harness 输入框下方的状态栏（`conversation.composer.dock`）显示**当前模型所属厂商的额度与消耗**，并随模型切换自动切换。
+
+支持：**智谱 GLM** · **OpenCode Go** · **Kimi For Coding** · **小米 Token 套餐** · **DeepSeek 官方账户**
+
+## 效果图
+
+> 下列截图均取自**真实 DSH 界面**（深色主题、本机 GUI 无头截图），额度与余额为截取时刻的真实数据。
+
+### 状态栏徽标
+
+徽标贴在输入框右下角，跟随当前模型自动切换，点一下弹出明细：
+
+<img src="docs/images/glm-pill.png" width="640" alt="GLM 状态栏徽标"><br>
+<img src="docs/images/opencode-go-pill.png" width="640" alt="OpenCode Go 状态栏徽标"><br>
+<img src="docs/images/deepseek-pill.png" width="640" alt="DeepSeek 状态栏徽标（余额 + 今日消耗）">
+
+### 明细面板
+
+| GLM（智谱） | OpenCode Go | DeepSeek 官方 |
+|---|---|---|
+| <img src="docs/images/glm-panel.png" width="220" alt="GLM 明细面板"> | <img src="docs/images/opencode-go-panel.png" width="220" alt="OpenCode Go 明细面板"> | <img src="docs/images/deepseek-panel.png" width="220" alt="DeepSeek 余额与消耗面板"> |
+
+面板里包含：套餐窗口（5 小时 / 周 / 月）、剩余与重置倒计时、工具额度明细、**Token 用量统计（今日 / 7 天 / 30 天）**、DeepSeek 的账户余额与估算费用、指示器形态切换。
+
+### 环状指示器
+
+面板底部可切换柱状 / 环状两种指示器：
+
+| GLM | OpenCode Go |
+|---|---|
+| <img src="docs/images/glm-ring.png" width="430" alt="GLM 环状指示器"> | <img src="docs/images/opencode-go-ring.png" width="430" alt="OpenCode Go 环状指示器"> |
+
+## 徽标示意
 
 ```
-GLM 5h 21% ▰ · 周 6% ▰                 ← 当前模型在智谱（zai-coding-cn）
-OpenCode 5h 8% ▰ · 周 3% ▰ · 月 1% ▰         ← 当前模型在 OpenCode Go（opencode-go，三窗口用短标签）
-Kimi 5h 24% ▰ · 周 42% ▰               ← 当前模型在 Kimi For Coding（kimi-coding）
-小米 套餐 12% ▰ · 月 17% ▰             ← 当前模型在小米 Token 套餐（xiaomi-token-plan-*）
-DeepSeek 余额 ¥85.59 · 今日 ¥1.02      ← 当前模型在 DeepSeek 官方（deepseek-account）
-（其它厂商，例如官方 DeepSeek 账号，徽标不占位）
+GLM 5h 21% ▰ · 周 6% ▰                     ← 智谱（zai-coding-cn）
+OpenCode 5h 8% ▰ · 周 3% ▰ · 月 1% ▰       ← OpenCode Go（opencode-go）
+Kimi 5h 24% ▰ · 周 42% ▰                   ← Kimi For Coding（kimi-coding）
+小米 套餐 12% ▰ · 月 17% ▰                 ← 小米 Token 套餐（xiaomi-token-plan-*）
+DeepSeek 余额 ¥85.31 · 今日 ¥1.26          ← DeepSeek 官方（deepseek-account）
+（其它厂商，例如未配置额度的路由，徽标不占位）
 ```
 
-点击徽标弹出明细面板（样式对齐官方「上下文已用」面板，264px 宽紧凑布局）：
+## 自动切换逻辑
 
-```
-GLM 套餐额度                    套餐 最高
-──────────────────────────────────────
-5 小时额度                     已用 21%
-▓▓▓▓░░░░░░░░░░░░░░░░░░
-剩余 79%         重置 17:12 · 3h 12m
+宿主侧路由 `GET /quota/active` 读取 DSH 的「当前默认模型选择」（`agentDefaultModel` 服务，每次切换模型都会更新），把 provider 映射到额度来源：
 
-本周额度                         已用 6%
-▓░░░░░░░░░░░░░░░░░░░░░
-剩余 94%       重置 11/4 11:12 · 6d 21h
+| provider | 来源 | 数据接口 |
+|---|---|---|
+| `zai-coding-cn` / `zai` | 智谱 GLM | `GET https://open.bigmodel.cn/api/monitor/usage/quota/limit` |
+| `opencode-go` / `opencode` | OpenCode Go | `GET https://opencode.ai/zen/go/v1/usage` |
+| `kimi-coding` | Kimi For Coding | `GET https://api.kimi.com/coding/v1/usages` |
+| `xiaomi-token-plan-cn` / `-ams` / `-sgp` / `xiaomi` | 小米 Token 套餐 | `GET https://platform.xiaomimimo.com/api/v1/tokenPlan/usage` |
+| `deepseek-account` / `deepseek-api-key` / `deepseek` | DeepSeek 官方 | DSH 账号服务（平台钱包）或 `GET https://api.deepseek.com/user/balance` |
+| 其它（如官方 DeepSeek 账号） | 无 | 徽标自动隐藏 |
 
-本月工具额度                  696 / 4000
-▓▓▓░░░░░░░░░░░░░░░░░░░
-已用 17% · 剩余 3304 · 重置 11/5 11:12 · 7d 21h
-  联网搜索 676  网页阅读 20  文档阅读 0
-──────────────────────────────────────
-更新于 14:12                    每 60 秒刷新
-Token 用量              今日  7天  30天
-总量                          3.4亿
-输入 586万 · 输出 78万 · 缓存 97.8%
-1711 次请求
-▁▁▁▂▃▅█
-──────────────────────────────────────
-指示器                        柱状  环状
-```
+切换模型后约 1 秒内跟着切换：客户端每秒查一次 `/quota/active`（宿主只读内存，开销可忽略），窗口重新获得焦点时立即查一次，另外订阅 `settings/document-updated` 事件做即时触发；额度本身每 60 秒刷新一次。
 
 ## Token 用量统计
 
@@ -49,7 +68,7 @@ Token 用量              今日  7天  30天
 
 数据来自**本机会话日志**（`$DSH_HOME/sessions/**/session*.jsonl.zstd`，逐帧解压后按事件时间归到本地自然日），完全本地计算：不联网、不上传、不落盘新文件。单次扫描 30 个会话约 60~250ms，结果按区间缓存 60 秒。
 
-## DeepSeek 官方监控（余额 + 消耗）
+## DeepSeek 官方监控
 
 DeepSeek 官方只开放了一个余额接口（`GET https://api.deepseek.com/user/balance`），没有用量接口，所以这里把**余额**和**消耗**分开取：
 
@@ -88,53 +107,6 @@ Token 用量        今日  7天  30天
 - 金额是**估算**：按每条请求的 token × 当时时段单价累加；法定节假日按工作日计算，金额会略微偏高
 - 缓存命中率沿用 DSH 口径：`cacheReadTokens / (totalTokens - outputTokens)`
 
-## 效果图
-
-截图取自**真实的 DSH 界面**（本机 GUI，深色主题，无头 Chrome 连接后会截图；额度数字是截取那一刻的真实值）。
-
-### GLM（智谱）
-
-状态栏徽标（柱状条）：
-
-<img src="docs/images/glm-pill.png" width="640" alt="GLM 状态栏徽标">
-
-点击后的明细面板：
-
-<img src="docs/images/glm-panel.png" width="330" alt="GLM 明细面板">
-
-### OpenCode Go
-
-状态栏徽标：
-
-<img src="docs/images/opencode-go-pill.png" width="640" alt="OpenCode Go 状态栏徽标">
-
-明细面板：
-
-<img src="docs/images/opencode-go-panel.png" width="330" alt="OpenCode Go 明细面板">
-
-### 环状指示器
-
-面板底部「指示器」可切换柱状 / 环状：
-
-| GLM | OpenCode Go |
-|---|---|
-| <img src="docs/images/glm-ring.png" width="440" alt="GLM 环状指示器"> | <img src="docs/images/opencode-go-ring.png" width="440" alt="OpenCode Go 环状指示器"> |
-
-## 自动切换逻辑
-
-宿主侧路由 `GET /quota/active` 读取 DSH 的「当前默认模型选择」（`agentDefaultModel` 服务，每次切换模型都会更新），把 provider 映射到额度来源：
-
-| provider | 来源 | 数据接口 |
-|---|---|---|
-| `zai-coding-cn` / `zai` | 智谱 GLM | `GET https://open.bigmodel.cn/api/monitor/usage/quota/limit` |
-| `opencode-go` / `opencode` | OpenCode Go | `GET https://opencode.ai/zen/go/v1/usage` |
-| `kimi-coding` | Kimi For Coding | `GET https://api.kimi.com/coding/v1/usages` |
-| `xiaomi-token-plan-cn` / `-ams` / `-sgp` / `xiaomi` | 小米 Token 套餐 | `GET https://platform.xiaomimimo.com/api/v1/tokenPlan/usage` |
-| `deepseek-account` / `deepseek-api-key` / `deepseek` | DeepSeek 官方 | DSH 账号服务（平台钱包）或 `GET https://api.deepseek.com/user/balance` |
-| 其它（如官方 DeepSeek 账号） | 无 | 徽标自动隐藏 |
-
-切换模型后约 1 秒内跟着切换：客户端每秒查一次 `/quota/active`（宿主只读内存，开销可忽略），窗口重新获得焦点时立即查一次，另外订阅 `settings/document-updated` 事件做即时触发；额度本身每 60 秒刷新一次。
-
 ## 数据与语义
 
 - 两个接口返回的都是**已用百分比**。智谱的 `TIME_LIMIT` 同时给 `696/4000` 与 `percentage: 17`，可证 `percentage` = 已用；OpenCode 的 `rolling/weekly/monthly` 同理。面板里同时给「剩余」。
@@ -146,7 +118,26 @@ Token 用量        今日  7天  30天
 - 徽标内文字统一 12px / 同色 / 400 字重（与官方统计徽标同规格），进度条放在数字后面：常态绿、≥70% 琥珀、≥90% 红，轨道同色 18% 浅染。
 - 徽标里窗口名用短标签（`5h` / `周` / `月`，面板里仍是完整标题），来源配置见 `client.js` 的 `SOURCES[*].shortLabels`。
 
-## 安装方式
+## 安装与更新（从 GitHub）
+
+插件在 DSH profile 里作为普通依赖安装，运行时从 `$DSH_HOME/profiles/<profile>/node_modules` 加载：
+
+```bash
+# 安装（跟踪 main 最新提交）
+dsh plugin --profile desktop add github:shy3130/dsh-quota
+
+# 更新已安装的版本
+dsh plugin --profile desktop update @local/dsh-quota
+
+# 钉住某个发布版本（推荐生产环境）
+dsh plugin --profile desktop add github:shy3130/dsh-quota#v1.2.0
+```
+
+- 安装/更新后要**完全退出并重开 DSH**：宿主插件在启动时加载，只刷新页面不够
+- 仅 `client.js` 的改动刷新页面即可，但版本更新通常包含宿主改动，按上面的步骤走
+- `pnpm-lock.yaml` 会把 GitHub 依赖钉到具体提交（`codeload.github.com/.../tar.gz/<sha>`），所以“更新”就是重新解析目标 ref 的最新提交
+- 每个版本见 [Releases](https://github.com/shy3130/dsh-quota/releases)，附带可直接分发的源码包
+- 开发调试时可切回本地软链：`dsh plugin --profile desktop add link:/path/to/dsh-quota`（改代码重启即生效）
 
 ```bash
 git clone https://github.com/shy3130/dsh-quota.git ~/Project/dsh-quota
@@ -231,22 +222,6 @@ git clone https://github.com/shy3130/dsh-quota.git ~/Project/dsh-quota
 | DeepSeek 官方 | 通常不用（DSH 已登录 DeepSeek 账号即可）；否则 `DEEPSEEK_API_KEY` | 账号模式走 DSH 的 `deepseekAccount` 服务；API Key 模式走官方 `GET /user/balance` |
 
 凭据可以放在环境变量里，也可以经 DSH 的凭据服务按上面的名字保存（插件只用引用名，不落盘）。
-
-## 安装与更新（从 GitHub）
-
-插件在 DSH profile 里作为普通依赖安装，宿主本地仓库不参与运行时：
-
-```bash
-# 安装 / 更新到 main 最新提交
-dsh plugin --profile desktop add github:shy3130/dsh-quota
-# 或已装过的常规更新
-dsh plugin --profile desktop update @local/dsh-quota
-```
-
-- 安装/更新后要**完全退出并重开 DSH**（宿主插件在启动时加载；只刷新页面不够）
-- 客户端改动（`client.js`）刷新页面即可，但版本更新涉及宿主时仍需重启
-- `pnpm-lock.yaml` 会把 GitHub 依赖钉到某个提交（`codeload.github.com/.../tar.gz/<sha>`），所以「更新」本质是重新解析 main 的最新提交
-- 想开发调试时再切回本地软链：`dsh plugin --profile desktop add link:/path/to/dsh-quota`（改代码重启即生效）
 
 ## 卸载
 

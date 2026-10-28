@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-quota",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "在输入框下方跟随当前模型显示对应厂商的套餐额度：智谱 GLM（5 小时 / 本周 / 工具额度）与 OpenCode Go（5 小时 / 本周 / 本月）；可扩展更多厂商。",
   "type": "module",
