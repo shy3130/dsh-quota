@@ -40,7 +40,7 @@ test('sources are syntactically valid', () => {
 
 test('host plugin exports the expected surface', async () => {
   const mod = await import('../index.js');
-  assert.equal(mod.name, '@local/dsh-quota');
+  assert.equal(mod.name, '@wshylabs/dsh-quota');
   assert.ok(Array.isArray(mod.inject));
   assert.ok(mod.inject.includes('webServer'));
   assert.equal(typeof mod.apply, 'function');

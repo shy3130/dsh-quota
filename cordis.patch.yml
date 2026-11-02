@@ -1,4 +1,4 @@
 # 智谱套餐额度状态栏插件：把插件行插入当前 profile。
 - insert:
     - id: dsh-quota
-      name: '@local/dsh-quota'
+      name: '@wshylabs/dsh-quota'

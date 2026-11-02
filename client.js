@@ -14,7 +14,7 @@
  * 重置时间（倒计时用 <1m / 42m / 3h 24m / 6d 21h），工具额度与分项明细。
  */
 window.__ModuleLoader__.load({
-  id: '@local/dsh-quota',
+  id: '@wshylabs/dsh-quota',
   factory(require) {
     const React = require('react');
     const ReactDOM = (() => {
@@ -27,7 +27,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement;
     const { useEffect, useState, useRef } = React;
 
-    const NS = '@local/dsh-quota';
+    const NS = '@wshylabs/dsh-quota';
     const ACTIVE_ROUTE = '/quota/active';
     const CONFIG_ROUTE = '/quota/config';
     const TOKENS_ROUTE = '/quota/tokens';

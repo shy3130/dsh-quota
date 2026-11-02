@@ -31,7 +31,7 @@ import nodePath from 'node:path';
 import os from 'node:os';
 import zlib from 'node:zlib';
 
-export const name = '@local/dsh-quota';
+export const name = '@wshylabs/dsh-quota';
 export const inject = ['webServer'];
 
 /** 成功结果缓存时长：轮询间隔 60s，缓存 55s 让页面刷新时能复用一次。 */

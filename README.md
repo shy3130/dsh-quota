@@ -95,7 +95,20 @@ dsh plugin --profile desktop add github:shy3130/dsh-quota
 
 > **客户端版本**：本插件在 **DeepSeek Harness 0.2.1-rc.3**（桌面端 RC 版）开发与实测。DSH 处于 RC/预览阶段、接口迭代较快，升级客户端后如遇徽标不显示或面板异常，请到 [Issues](https://github.com/shy3130/dsh-quota/issues) 附上 `dsh --version` 反馈。
 
-### 从 GitHub 安装（推荐）
+### 从 npm 安装（推荐）
+
+```bash
+# 安装最新版
+dsh plugin --profile desktop add @wshylabs/dsh-quota
+
+# 钉住某个版本
+dsh plugin --profile desktop add @wshylabs/dsh-quota@1.4.0
+
+# 更新已安装的版本
+dsh plugin --profile desktop update @wshylabs/dsh-quota
+```
+
+### 从 GitHub 安装
 
 ```bash
 # 安装（跟踪 main 最新提交）
@@ -105,7 +118,7 @@ dsh plugin --profile desktop add github:shy3130/dsh-quota
 dsh plugin --profile desktop add github:shy3130/dsh-quota#v1.3.1
 
 # 更新已安装的版本
-dsh plugin --profile desktop update @local/dsh-quota
+dsh plugin --profile desktop update @wshylabs/dsh-quota
 ```
 
 - 安装 / 更新后需要**完全退出并重开 DSH**：宿主插件在启动时加载，仅刷新页面不够
@@ -132,7 +145,7 @@ dsh plugin --profile desktop add link:/Users/<you>/Project/dsh-quota
 ### 卸载
 
 ```bash
-dsh plugin --profile desktop remove @local/dsh-quota
+dsh plugin --profile desktop remove @wshylabs/dsh-quota
 ```
 
 源码补丁方式安装的，删除补丁层里对应的 `insert` 行。之后重启 DSH。
@@ -158,7 +171,7 @@ dsh plugin --profile desktop remove @local/dsh-quota
 ```yaml
 - insert:
     - id: dsh-quota
-      name: '@local/dsh-quota'
+      name: '@wshylabs/dsh-quota'
       config:
         sources:
           zhipu:
@@ -182,7 +195,7 @@ dsh plugin --profile desktop remove @local/dsh-quota
 ```yaml
 - insert:
     - id: dsh-quota
-      name: '@local/dsh-quota'
+      name: '@wshylabs/dsh-quota'
       config:
         indicator: ring   # bar（默认）| ring
 ```
