@@ -102,7 +102,7 @@ dsh plugin --profile desktop add github:shy3130/dsh-quota
 dsh plugin --profile desktop add @wshylabs/dsh-quota
 
 # 钉住某个版本
-dsh plugin --profile desktop add @wshylabs/dsh-quota@1.4.0
+dsh plugin --profile desktop add @wshylabs/dsh-quota@1.4.1
 
 # 更新已安装的版本
 dsh plugin --profile desktop update @wshylabs/dsh-quota
@@ -347,6 +347,8 @@ git add -A && git commit -m "..." && git push
 git tag v1.3.x && git push origin v1.3.x
 gh release create v1.3.x --title v1.3.x --notes "..."   # 可选：只写改动说明
 ```
+
+推 tag 后 `.github/workflows/publish.yml` 会用 npm 可信发布（OIDC，无需令牌）自动跑测试并发布到 npm；npm 包列表出现新版本即成功。
 
 ## 项目结构
 
