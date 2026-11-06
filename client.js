@@ -143,10 +143,6 @@ window.__ModuleLoader__.load({
       tokensRequests: '{n} 次请求',
       tokensLoading: '统计中…',
       tokensEmpty: '暂无记录',
-      /** 徽标里的区间短标签。 */
-      tokenRangeToday: '今日',
-      tokenRange7d: '7日',
-      tokenRange30d: '30日',
       titleDeepseek: 'DeepSeek 余额与消耗',
       dsBalance: '账户余额',
       dsTotal: '总余额',
@@ -206,9 +202,6 @@ window.__ModuleLoader__.load({
       tokensRequests: '{n} requests',
       tokensLoading: 'counting…',
       tokensEmpty: 'no records',
-      tokenRangeToday: 'today',
-      tokenRange7d: '7d',
-      tokenRange30d: '30d',
       titleDeepseek: 'DeepSeek balance & spend',
       dsBalance: 'Balance',
       dsTotal: 'Total',
@@ -395,13 +388,6 @@ window.__ModuleLoader__.load({
       const n = Number(value);
       if (!Number.isFinite(n)) return '--';
       return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    }
-
-    /** 徽标里的区间短标签：今日 / 7日 / 30日。 */
-    function pillRangeLabel(t, range) {
-      if (range === 'today') return t('tokenRangeToday');
-      if (range === '30d') return t('tokenRange30d');
-      return t('tokenRange7d');
     }
 
     function formatClock(ms) {
@@ -779,45 +765,40 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * pill 内文：DeepSeek 官方按「Token 用量 → 今日消耗 → 余额」排；
+     * pill 内文：DeepSeek 官方按「今日 Token 用量 → 今日消耗 → 余额」排；
      * 其他来源按可展示的额度窗口排。
-     * Token 用量跟随面板里选中的区间（今日 / 7 天 / 30 天）并做单位换算，
-     * 只采用「当前区间 + DeepSeek 厂商」的数据，换区间时先占位再更新。
+     * 徽标固定展示「今日」的全厂商总用量（K/M/B），7 天 / 30 天在弹层里切换查看。
      */
     function buildContent(t, source, state, indicator, extra) {
       if (state.phase === 'loading') return [h('span', { key: 'load' }, t('loading'))];
       const data = state.data;
       if (source === 'deepseek') {
         const nodes = [];
-        const usage = extra !== undefined && extra !== null ? extra.tokens : undefined;
-        const usageRange = extra !== undefined && extra !== null ? extra.tokenRange : '7d';
-        const usageError = usage !== undefined && usage !== null && usage.ok === false;
-        const usageReady = usage !== undefined && usage !== null && usage.ok === true
-          && extra.tokensRange === usageRange && extra.tokensProvider === 'deepseek';
+        const today = extra !== undefined && extra !== null ? extra.dsToday : undefined;
+        const todayReady = today !== undefined && today !== null && today.ok === true;
+        const unsupported = today !== undefined && today !== null && today.ok === false && today.error === 'unsupported';
         // 旧版宿主没有 /quota/tokens：整个 Token 片段不占位。
-        if (!(usageError && usage.error === 'unsupported')) {
-          // 徽标展示全厂商总用量；带过滤的 totals 只用于 tooltip 里的 DeepSeek 官方分项。
-          const view = usageReady ? usage.all ?? usage : undefined;
-          const total = view !== undefined ? Number(view.totals?.total) : undefined;
-          const own = usageReady && usage.all !== undefined ? Number(usage.totals?.total) : undefined;
+        if (!unsupported) {
+          // 固定展示今日全厂商总用量；带过滤的 totals 只用于 tooltip 里的 DeepSeek 官方分项。
+          const total = todayReady ? Number(today.all?.totals?.total ?? today.totals?.total) : undefined;
+          const own = todayReady && today.all !== undefined ? Number(today.totals?.total) : undefined;
           let usageText;
           if (total !== undefined && Number.isFinite(total)) usageText = formatTokens(total);
-          else if (usage === undefined || !usageError) usageText = t('loading');
+          else if (today === undefined || today === null) usageText = t('loading');
           else usageText = '--';
           let title;
           if (total !== undefined && Number.isFinite(total)) {
-            title = `${pillRangeLabel(t, usageRange)} ${t('tokensTotal')} ${formatExact(total)}`;
+            title = `${t('tokensToday')} ${t('tokensTotal')} ${formatExact(total)}`;
             if (own !== undefined && Number.isFinite(own)) title += ` · DeepSeek ${formatExact(own)}`;
           }
           nodes.push(h('span', { key: 'tokens', className: 'zq-part', title }, [
-            // 区间与「总量」只给读屏与悬浮提示，视觉上保持紧凑。
-            h('span', { key: 'a11y', className: 'zq-sronly' }, `${pillRangeLabel(t, usageRange)} ${t('tokensTotal')}`),
+            // 「今日 总量」只给读屏与悬浮提示，视觉上保持紧凑。
+            h('span', { key: 'a11y', className: 'zq-sronly' }, `${t('tokensToday')} ${t('tokensTotal')}`),
             h('span', { key: 'num', className: 'zq-num' }, usageText),
             total !== undefined && Number.isFinite(total) ? h('span', { key: 'unit', className: 'zq-unit' }, 'tok') : null,
           ]));
         }
-        const today = extra !== undefined && extra !== null ? extra.dsToday : undefined;
-        if (today !== undefined && today !== null && today.ok === true && typeof today.totals?.cost === 'number') {
+        if (todayReady && typeof today.totals?.cost === 'number') {
           nodes.push(h('span', { key: 'sep-today', className: 'zq-sep', 'aria-hidden': true }, '·'));
           nodes.push(h('span', { key: 'today', className: 'zq-part zq-today', title: t('dsTodayCost') }, [
             h('span', { key: 'tag' }, t('todayShort')),
@@ -873,9 +854,6 @@ window.__ModuleLoader__.load({
       const [open, setOpen] = useState(false);
       const [pos, setPos] = useState(null);
       const [tokens, setTokens] = useState(undefined);
-      /** 当前 tokens 数据所属的区间 / 厂商，避免换区间时把旧数字当成新数字显示。 */
-      const [tokensRange, setTokensRange] = useState(undefined);
-      const [tokensProvider, setTokensProvider] = useState(undefined);
       const [tokenRange, setTokenRange] = useState('7d');
       const [dsToday, setDsToday] = useState(undefined);
       const tokenMemo = useRef({ range: null, provider: undefined, at: 0 });
@@ -889,9 +867,7 @@ window.__ModuleLoader__.load({
       const sessionSelRef = useRef(null);
       const tickRef = useRef(null);
       const sourceRef = useRef(null);
-      const tokenRangeRef = useRef(tokenRange);
       sourceRef.current = source;
-      tokenRangeRef.current = tokenRange;
       sessionSelRef.current = sessionProvider === null
         ? null
         : { provider: sessionProvider, model: typeof picked.model === 'string' ? picked.model : '' };
@@ -924,9 +900,8 @@ window.__ModuleLoader__.load({
             // 来源没变就不动 React 状态，避免每秒重渲染；配额到 55s 才刷新。
             if (next === lastSource.current) {
               if (next === 'deepseek') {
-                // 徽标上的 Token 用量与今日消耗各自按 60s 复用，跨过零点也会刷新。
+                // 徽标上的今日 Token 用量 / 今日消耗：60s 复用，跨过零点也会刷新。
                 loadDsToday();
-                loadTokens(tokenRangeRef.current);
               }
               if (next === null || Date.now() - memo.current.at <= QUOTA_TTL_MS) return;
               const data = await fetch(SOURCES[next].route, { headers: { accept: 'application/json' }, cache: 'no-store' }).then((res) => res.json());
@@ -945,10 +920,7 @@ window.__ModuleLoader__.load({
             }
             // 换了厂商：立刻把旧数据换成新来源的额度（宿主对同一来源还有 55s 缓存）。
             setState({ phase: 'loading' });
-            if (next === 'deepseek') {
-              loadDsToday();
-              loadTokens(tokenRangeRef.current);
-            }
+            if (next === 'deepseek') loadDsToday();
             const data = await fetch(SOURCES[next].route, { headers: { accept: 'application/json' }, cache: 'no-store' }).then((res) => res.json());
             if (!alive.current) return;
             memo.current = { source: next, at: Date.now() };
@@ -1047,11 +1019,12 @@ window.__ModuleLoader__.load({
         // 先记时间再取数：tick 每秒调用一次，失败时不能每秒重发。
         dsMemo.current = { at: Date.now() };
         try {
-          const data = await fetch(`${TOKENS_ROUTE}?range=today&provider=deepseek`, { headers: { accept: 'application/json' }, cache: 'no-store' }).then((res) => (res.status === 404 ? undefined : res.json()));
+          const data = await fetch(`${TOKENS_ROUTE}?range=today&provider=deepseek`, { headers: { accept: 'application/json' }, cache: 'no-store' }).then((res) => (res.status === 404 ? { ok: false, error: 'unsupported' } : res.json()));
           if (!alive.current) return;
           setDsToday(data);
         } catch {
-          /* 静默失败：徽标只显示余额 */
+          // 首次失败显示占位「--」；已有数据则保留，下一轮 TTL 后再试。
+          if (alive.current) setDsToday((current) => (current === undefined ? { ok: false, error: 'network' } : current));
         }
       };
 
@@ -1069,8 +1042,6 @@ window.__ModuleLoader__.load({
         const settle = (data) => {
           // 已被更新的请求取代：丢弃这次迟到的结果。
           if (seq !== tokenSeq.current) return;
-          setTokensRange(range);
-          setTokensProvider(provider);
           setTokens(data);
         };
         try {
@@ -1091,7 +1062,6 @@ window.__ModuleLoader__.load({
       };
 
       const pickTokenRange = (range) => {
-        tokenRangeRef.current = range;
         setTokenRange(range);
         loadTokens(range, true);
       };
@@ -1100,7 +1070,7 @@ window.__ModuleLoader__.load({
       if (hidden) return null;
       const useSource = source === null ? 'zhipu' : source;
       const config = SOURCES[useSource];
-      const nodes = buildContent(t, useSource, state, indicator, { dsToday, tokens, tokensRange, tokensProvider, tokenRange });
+      const nodes = buildContent(t, useSource, state, indicator, { dsToday });
       const label = [config.brand, ...flattenText(nodes)].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
       const panel = open && ReactDOM !== null
         ? ReactDOM.createPortal(
