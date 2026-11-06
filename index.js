@@ -472,37 +472,26 @@ function providerMatches(eventProvider, provider) {
   return eventProvider === provider || eventProvider.startsWith(`${provider}-`) || provider.startsWith(`${eventProvider}-`);
 }
 
-/** 按区间聚合 Token 用量；导出让测试可以直接调用。 */
-export async function collectTokenUsage({ home, range = '7d', provider, now = Date.now() } = {}) {
-  const days = TOKEN_RANGES[range] ?? TOKEN_RANGES['7d'];
-  const todayStart = localDayStart(now);
-  const from = todayStart - (days - 1) * DAY_MS;
-  const buckets = new Map();
-  const logs = await listSessionLogs(nodePath.join(home ?? '', 'sessions'));
-  let scannedFiles = 0;
-  for (const log of logs) {
-    // 最后写入早于区间起点 → 区间内不可能有事件，直接跳过。
-    if (log.mtimeMs < from) continue;
-    scannedFiles += 1;
-    for (const event of await readFileUsageEvents(log)) {
-      if (event.time < from || event.time > now) continue;
-      if (!providerMatches(event.provider, provider)) continue;
-      const key = dayKeyOf(localDayStart(event.time));
-      const bucket = buckets.get(key) ?? { day: key, input: 0, output: 0, cacheRead: 0, total: 0, requests: 0, cost: 0 };
-      bucket.input += event.input;
-      bucket.output += event.output;
-      bucket.cacheRead += event.cacheRead;
-      bucket.total += event.total;
-      bucket.requests += 1;
-      const cost = deepseekCost(event.model, event);
-      if (cost !== undefined) bucket.cost += cost;
-      buckets.set(key, bucket);
-    }
-  }
+function makeTokenBucket(day) {
+  return { day, input: 0, output: 0, cacheRead: 0, total: 0, requests: 0, cost: 0 };
+}
+
+function accumulateTokenEvent(bucket, event, cost) {
+  bucket.input += event.input;
+  bucket.output += event.output;
+  bucket.cacheRead += event.cacheRead;
+  bucket.total += event.total;
+  bucket.requests += 1;
+  if (cost !== undefined) bucket.cost += cost;
+}
+
+/** 把按天桶补成完整区间并汇总（费用保留 4 位小数）。 */
+function buildTokenSummary(buckets, days, todayStart) {
+  const round = (value) => Math.round(value * 1e4) / 1e4;
   const daily = [];
   for (let back = days - 1; back >= 0; back -= 1) {
     const key = dayKeyOf(todayStart - back * DAY_MS);
-    daily.push(buckets.get(key) ?? { day: key, input: 0, output: 0, cacheRead: 0, total: 0, requests: 0, cost: 0 });
+    daily.push(buckets.get(key) ?? makeTokenBucket(key));
   }
   const totals = { input: 0, output: 0, cacheRead: 0, total: 0, requests: 0, cost: 0 };
   for (const item of daily) {
@@ -515,8 +504,51 @@ export async function collectTokenUsage({ home, range = '7d', provider, now = Da
   }
   const promptTokens = totals.total - totals.output;
   const cacheHit = promptTokens > 0 ? Math.round((totals.cacheRead / promptTokens) * 1000) / 10 : null;
-  const costKnown = provider !== undefined && totals.cost > 0;
   return {
+    totals: { ...totals, cost: round(totals.cost), cacheHit },
+    daily: daily.map((item) => ({ ...item, cost: round(item.cost) })),
+  };
+}
+
+/**
+ * 按区间聚合 Token 用量；导出让测试可以直接调用。
+ *
+ * 带 provider 过滤时（DeepSeek 官方面板要按官方价目算费用）：
+ *   - totals / daily 保持过滤口径（费用、DeepSeek 官方用量）；
+ *   - 额外返回 `all`：同区间内所有厂商的合计，供徽标与「总用量」展示。
+ * 不带 provider 时 totals / daily 就是全量口径。
+ */
+export async function collectTokenUsage({ home, range = '7d', provider, now = Date.now() } = {}) {
+  const days = TOKEN_RANGES[range] ?? TOKEN_RANGES['7d'];
+  const todayStart = localDayStart(now);
+  const from = todayStart - (days - 1) * DAY_MS;
+  const allBuckets = new Map();
+  // 全量桶与过滤桶分开累计；不带过滤时共用一份，避免重复累加。
+  const filteredBuckets = provider === undefined ? allBuckets : new Map();
+  const logs = await listSessionLogs(nodePath.join(home ?? '', 'sessions'));
+  let scannedFiles = 0;
+  for (const log of logs) {
+    // 最后写入早于区间起点 → 区间内不可能有事件，直接跳过。
+    if (log.mtimeMs < from) continue;
+    scannedFiles += 1;
+    for (const event of await readFileUsageEvents(log)) {
+      if (event.time < from || event.time > now) continue;
+      const key = dayKeyOf(localDayStart(event.time));
+      const all = allBuckets.get(key) ?? makeTokenBucket(key);
+      // 全量桶不带费用：费用只对 DeepSeek 官方口径有意义。
+      accumulateTokenEvent(all, event, provider === undefined ? deepseekCost(event.model, event) : undefined);
+      allBuckets.set(key, all);
+      if (filteredBuckets !== allBuckets && providerMatches(event.provider, provider)) {
+        const filtered = filteredBuckets.get(key) ?? makeTokenBucket(key);
+        accumulateTokenEvent(filtered, event, deepseekCost(event.model, event));
+        filteredBuckets.set(key, filtered);
+      }
+    }
+  }
+  const all = buildTokenSummary(allBuckets, days, todayStart);
+  const filtered = provider === undefined ? all : buildTokenSummary(filteredBuckets, days, todayStart);
+  const costKnown = provider !== undefined && filtered.totals.cost > 0;
+  const payload = {
     ok: true,
     range,
     days,
@@ -526,13 +558,13 @@ export async function collectTokenUsage({ home, range = '7d', provider, now = Da
     generatedAt: Date.now(),
     scannedFiles,
     totals: {
-      ...totals,
-      cost: Math.round(totals.cost * 1e4) / 1e4,
+      ...filtered.totals,
       ...(costKnown ? { currency: 'CNY' } : {}),
-      cacheHit,
     },
-    daily: daily.map((item) => ({ ...item, cost: Math.round(item.cost * 1e4) / 1e4 })),
+    daily: filtered.daily,
   };
+  if (provider !== undefined) payload.all = all;
+  return payload;
 }
 
 /** $DSH_HOME 解析：插件 config.home > 环境变量 > ~/.dsh。 */

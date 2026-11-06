@@ -39,9 +39,9 @@ dsh plugin --profile desktop add github:shy3130/dsh-quota
   - OpenCode Go：5 小时滚动窗 · 本周 · 本月
   - Kimi For Coding：5 小时窗口 · 本周汇总
   - 小米 Token 套餐：套餐额度 · 补偿额度 · 本月总量
-  - DeepSeek 官方：Token 用量（跟随今日 / 7 天 / 30 天切换）+ 今日消耗 + 账户余额（充值 / 赠送）
+  - DeepSeek 官方：本机总 Token 用量（跟随今日 / 7 天 / 30 天切换，K / M / B 换算）+ 今日消耗 + 账户余额（充值 / 赠送）
 - **明细面板** —— 剩余 / 已用 / 重置倒计时（`6d 21h` 紧凑格式）、工具额度分项、柱状 / 环状指示器可切换并记忆
-- **Token 用量统计** —— 今日 / 7 天 / 30 天切换：总量、输入 / 输出、缓存命中率、请求数与每日柱状图，全部本地计算；徽标最左侧同步展示所选区间的 Token 总量
+- **Token 用量统计** —— 今日 / 7 天 / 30 天切换：总量、输入 / 输出、缓存命中率、请求数与每日柱状图，全部本地计算；总量按 K / M / B 换算，徽标最左侧同步展示所选区间的全厂商总用量
 - **DeepSeek 费用估算** —— 按官方价目表（区分高峰 / 空闲时段）由本地 token 记录估算金额，不需要官方用量接口
 - **手机端适配** —— 窄屏（≤520px）下徽标自动紧凑（隐藏分隔符、缩短进度条；DeepSeek 徽标只保留 Token 用量与余额），弹层横向铺满并限制高度，触屏点外部关闭
 - **纯插件、零侵入** —— 不修改任何官方源码；标准 DSH bundle，一条命令安装；所有路由带 DSH 登录门
@@ -58,7 +58,7 @@ dsh plugin --profile desktop add github:shy3130/dsh-quota
 <img src="docs/images/opencode-go-pill.png" width="640" alt="OpenCode Go 状态栏徽标"><br>
 <img src="docs/images/deepseek-pill.png" width="640" alt="DeepSeek 状态栏徽标">
 
-> DeepSeek 徽标已改为「Token 用量 · 今日消耗 · 余额」排布（见下方「徽标示意」），
+> DeepSeek 徽标已改为「总用量 · 今日消耗 · 余额」排布（见下方「徽标示意」），
 > `deepseek-pill.png` 为 1.4.x 版截图，新版截图待补。
 
 ### 明细面板
@@ -231,7 +231,7 @@ GLM 5h 21% ▰ · 周 6% ▰                     ← 智谱（zai-coding-cn）
 OpenCode 5h 8% ▰ · 周 3% ▰ · 月 1% ▰       ← OpenCode Go（opencode-go）
 Kimi 5h 24% ▰ · 周 42% ▰                   ← Kimi For Coding（kimi-coding）
 小米 套餐 12% ▰ · 月 17% ▰                 ← 小米 Token 套餐（xiaomi-token-plan-*）
-DeepSeek Token 7日 128万 · 今日 ¥1.26 · 余额 ¥85.31   ← DeepSeek 官方（deepseek-account）
+DeepSeek 1.4B tok · 今日 ¥2.06 · 余额 ¥85.31    ← DeepSeek 官方（deepseek-account，7 天总用量）
 ```
 
 ### 数据口径
@@ -278,7 +278,7 @@ DeepSeek Token 7日 128万 · 今日 ¥1.26 · 余额 ¥85.31   ← DeepSeek 官
 - **输入 / 输出 / 缓存命中率**（缓存命中 = `cacheReadTokens / (totalTokens - outputTokens)`，与 DSH 自带口径一致）
 - **请求次数**，以及按天的迷你柱状图（今日 1 根，7 天 7 根，30 天 30 根）
 
-DeepSeek 官方徽标的最左侧同步显示这里的区间选择结果（今日 / 7 天 / 30 天的 Token 总量），切换区间后无需刷新。
+DeepSeek 官方徽标最左侧同步显示这里的区间结果：全厂商总用量的 K / M / B 紧凑值（如 1.4B tok），切换区间后即时更新；悬浮可看区间、精确值与 DeepSeek 官方分项。
 
 数据来自**本机会话日志**（`$DSH_HOME/sessions/**/session*.jsonl.zstd`），完全本地计算：不联网、不上传、不落盘新文件。
 
@@ -298,7 +298,7 @@ DeepSeek 官方只开放了一个余额接口（`GET https://api.deepseek.com/us
 - **余额**：优先用 DSH 已登录的 DeepSeek 账号（`deepseekAccount` 服务的平台钱包 `get_user_summary`，不需要额外凭据）；没登录时退回官方 API（需要 `DEEPSEEK_API_KEY`）
 - **今日消耗**：由本机会话日志算出 DeepSeek 官方模型的 token，再按官方价格表换算成金额
 
-徽标按「Token 用量 → 今日消耗 → 余额」排列：最左侧是面板里选中的区间（今日 / 7 天 / 30 天）的 Token 总量，按 万 / 亿（英文 K / M / B）换算单位，悬浮可看精确值；窄屏（≤520px）只保留 Token 用量与余额。面板分「余额」与「Token 用量」两区（见右上图），Token 区在 DeepSeek 面板下自动切换为**估算费用**口径（含每日费用柱状图）。
+徽标按「总用量 → 今日消耗 → 余额」排列：最左侧是面板里选中的区间（今日 / 7 天 / 30 天）的全厂商 Token 总用量，按 K / M / B 换算（如 1.4B tok），悬浮可看区间、精确值与 DeepSeek 官方分项；窄屏（≤520px）只保留总用量与余额。面板分「余额」与「Token 用量」两区（见右上图）：Token 区给出**总用量**（全厂商，含每日柱状图）与 **DeepSeek 官方估算费用**（按官方价目表，随所选区间汇总）。
 
 ### 价格与口径
 

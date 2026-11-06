@@ -143,8 +143,7 @@ window.__ModuleLoader__.load({
       tokensRequests: '{n} 次请求',
       tokensLoading: '统计中…',
       tokensEmpty: '暂无记录',
-      /** 徽标里的 Token 用量：短标签 + 区间短标签。 */
-      tokenShort: 'Token',
+      /** 徽标里的区间短标签。 */
       tokenRangeToday: '今日',
       tokenRange7d: '7日',
       tokenRange30d: '30日',
@@ -207,7 +206,6 @@ window.__ModuleLoader__.load({
       tokensRequests: '{n} requests',
       tokensLoading: 'counting…',
       tokensEmpty: 'no records',
-      tokenShort: 'Token',
       tokenRangeToday: 'today',
       tokenRange7d: '7d',
       tokenRange30d: '30d',
@@ -245,15 +243,17 @@ window.__ModuleLoader__.load({
     const CSS = [
       '.zq-anchor{flex:none;display:inline-flex;position:relative}',
       '.zq-anchor[data-align=end]{margin-left:auto;order:1}',
-      '.zq-pill{border-radius:var(--dsw-radius-sm);color:var(--dsw-alias-label-tertiary);font:inherit;font-size:calc(var(--dsh-content-font-size-secondary,13px) - 1px);font-variant-numeric:tabular-nums;line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:nowrap;cursor:pointer;background:0 0;border:none;flex:0 1 auto;min-width:0;max-width:100%;overflow:hidden;align-items:center;gap:6px;padding:1px 8px;display:inline-flex}',
+      '.zq-pill{border-radius:var(--dsw-radius-sm);color:var(--dsw-alias-label-tertiary);font:inherit;font-size:calc(var(--dsh-content-font-size-secondary,13px) - 1px);font-variant-numeric:tabular-nums;line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));white-space:nowrap;cursor:pointer;background:0 0;border:none;flex:0 1 auto;min-width:0;max-width:100%;overflow:hidden;align-items:center;gap:7px;padding:1px 9px;display:inline-flex}',
       '.zq-pill:hover,.zq-pill[aria-expanded=true]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}',
       '.zq-pill:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:-2px}',
       '.zq-brand{flex:none}',
       '.zq-part{display:inline-flex;align-items:center;gap:5px;min-width:0}',
-      '.zq-range{color:var(--dsw-alias-label-caption);margin-left:-3px}',
+      '.zq-num{color:var(--dsw-alias-label-secondary);font-weight:500}',
+      '.zq-unit{color:var(--dsw-alias-label-caption);margin-left:-2px;font-size:.92em}',
+      '.zq-sronly{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}',
       '.zq-bar{flex:none;width:26px;height:5px;border-radius:3px;background:var(--dsw-alias-border-l2,#dde1e7);overflow:hidden;display:inline-block}',
       '.zq-bar-fill{display:block;height:100%;border-radius:3px;min-width:4px}',
-      '.zq-sep{color:var(--dsw-alias-separator-primary);margin:0 1px}',
+      '.zq-sep{color:var(--dsw-alias-label-caption);margin:0 1px}',
       // —— 弹出面板（对齐 ContextMeter 面板） ——
       '.zp-panel{z-index:1100;box-sizing:border-box;border-radius:var(--dsw-radius-lg);background:var(--dsw-specific-menu);width:min(264px,100vw - 24px);max-height:calc(100vh - 88px);overflow-y:auto;overscroll-behavior:contain;backdrop-filter:var(--dsw-menu-backdrop-filter);--dsw-elevation-stroke-color:var(--dsw-alias-border-l1);box-shadow:var(--dsw-elevation-prominent);color:var(--dsw-alias-label-secondary);cursor:default;border:0;padding:10px 11px;font-size:12px;line-height:18px;position:fixed}',
       '.zp-head{align-items:center;gap:8px;display:flex}',
@@ -288,6 +288,8 @@ window.__ModuleLoader__.load({
       '.zp-range[aria-pressed=true]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
       '.zp-tokrow{align-items:baseline;display:flex;gap:6px}',
       '.zp-tokrow .zp-toknum{color:var(--dsw-alias-label-primary);font-weight:500;font-variant-numeric:tabular-nums;margin-left:auto}',
+      '.zp-tokcost{margin-top:2px}',
+      '.zp-tokcost .zp-toknum{color:var(--dsw-alias-label-secondary);font-weight:400}',
       '.zp-toksub{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px;font-variant-numeric:tabular-nums}',
       '.zp-spark{display:flex;align-items:flex-end;gap:2px;height:18px;margin-top:4px}',
       '.zp-spark i{flex:1;min-height:2px;border-radius:1px;background:var(--dsw-alias-state-business-primary);opacity:.85}',
@@ -298,14 +300,13 @@ window.__ModuleLoader__.load({
         + '.zq-part{gap:4px}'
         + '.zq-bar{width:18px}'
         + '.zq-sep{display:none}'
-        + '.zq-token-tag{display:none}'
-        // 窄屏只留 Token 用量与余额，今日消耗在弹层里看，避免把余额挤出可视区。
+        // 窄屏只留总用量与余额，今日消耗在弹层里看，避免把余额挤出可视区。
         + '.zq-today{display:none}'
         + '.zp-panel{left:12px;right:12px;width:auto;max-height:min(calc(100vh - 96px),72vh);padding:12px}'
         + '}',
-      // 超窄屏（≤344px）：连区间短标签也省掉，只留数值与余额。
+      // 超窄屏（≤344px）：省掉单位，只留数值与余额。
       '@media (max-width:344px){'
-        + '.zq-range{display:none}'
+        + '.zq-unit{display:none}'
         + '.zq-pill{gap:3px;padding:2px 6px}'
         + '}',
     ].join('');
@@ -371,6 +372,21 @@ window.__ModuleLoader__.load({
       if (abs >= 1e9) return `${trim((n / 1e9).toFixed(1))}B`;
       if (abs >= 1e6) return `${trim((n / 1e6).toFixed(1))}M`;
       if (abs >= 1e3) return `${trim((n / 1e3).toFixed(1))}K`;
+      return String(Math.round(n));
+    }
+
+    /**
+     * Token 数量按 K / M / B 换算（1000 进制，3 位有效数字）：
+     * 1.4B / 33.5M / 128K / 968；尾随的 .0/.00 会去掉。
+     */
+    function formatTokens(value) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return '--';
+      const abs = Math.abs(n);
+      const trim = (text) => text.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+      if (abs >= 1e9) return `${trim((n / 1e9).toFixed(abs >= 10e9 ? 1 : 2))}B`;
+      if (abs >= 1e6) return `${trim((n / 1e6).toFixed(abs >= 100e6 ? 0 : abs >= 10e6 ? 1 : 2))}M`;
+      if (abs >= 1e3) return `${trim((n / 1e3).toFixed(abs >= 100e3 ? 0 : 1))}K`;
       return String(Math.round(n));
     }
 
@@ -568,28 +584,36 @@ window.__ModuleLoader__.load({
         children.push(h('div', { key: 'empty', className: 'zp-toksub' }, failed ? t('unavailable') : t('tokensLoading')));
         return h('section', { key: 'tokens', className: 'zp-tok' }, children);
       }
-      const totals = data.totals ?? {};
-      // DeepSeek 过滤时带费用（有官方价格表），主行显示估算金额；其它来源显示 token 总量。
-      const costMode = typeof totals.currency === 'string' && typeof totals.cost === 'number';
-      const metric = (item) => (costMode ? item.cost ?? 0 : item.total ?? 0);
+      // 展示口径：带 provider 过滤的响应同时带 all（全厂商合计），总用量以 all 为准；
+      // totals 仅用于 DeepSeek 官方的估算费用行。
+      const view = data.all ?? data;
+      const totals = view.totals ?? {};
+      const filtered = data.all !== undefined ? data.totals ?? {} : undefined;
       children.push(h('div', { key: 'total', className: 'zp-tokrow' }, [
-        h('span', { key: 'label' }, costMode ? t('dsCost') : t('tokensTotal')),
-        h('span', { key: 'num', className: 'zp-toknum' }, costMode ? formatMoney(totals.cost ?? 0, totals.currency) : formatCount(totals.total ?? 0)),
+        h('span', { key: 'label' }, t('tokensTotal')),
+        h('span', { key: 'num', className: 'zp-toknum' }, formatTokens(totals.total ?? 0)),
       ]));
+      if (filtered !== undefined && typeof filtered.currency === 'string' && typeof filtered.cost === 'number') {
+        children.push(h('div', { key: 'cost', className: 'zp-tokrow zp-tokcost' }, [
+          h('span', { key: 'label' }, t('dsCost')),
+          h('span', { key: 'num', className: 'zp-toknum' }, formatMoney(filtered.cost, filtered.currency)),
+        ]));
+      }
       const cache = typeof totals.cacheHit === 'number' ? `${t('tokensCache')} ${totals.cacheHit}%` : undefined;
-      const sub = [t('tokensInput'), formatCount(totals.input ?? 0), '·', t('tokensOutput'), formatCount(totals.output ?? 0)];
+      const sub = [t('tokensInput'), formatTokens(totals.input ?? 0), '·', t('tokensOutput'), formatTokens(totals.output ?? 0)];
       if (cache !== undefined) sub.push('·', cache);
       children.push(h('div', { key: 'sub', className: 'zp-toksub' }, sub.join(' ')));
       children.push(h('div', { key: 'req', className: 'zp-toksub' }, t('tokensRequests', { n: formatCount(totals.requests ?? 0) })));
-      const daily = Array.isArray(data.daily) ? data.daily : [];
+      const daily = Array.isArray(view.daily) ? view.daily : [];
       if (daily.length > 1) {
+        const metric = (item) => Number(item.total ?? 0);
         let max = 0;
         for (const item of daily) max = Math.max(max, metric(item));
         children.push(h('div', { key: 'spark', className: 'zp-spark' },
           daily.map((item, index) => h('i', {
             key: `bar-${index}`,
             'data-empty': metric(item) === 0,
-            title: `${item.day} · ${costMode ? formatMoney(item.cost ?? 0, totals.currency) : formatCount(item.total ?? 0)}`,
+            title: `${item.day} · ${formatTokens(item.total ?? 0)}`,
             style: { height: `${Math.max(8, Math.round((metric(item) / (max === 0 ? 1 : max)) * 100))}%` },
           }))));
       }
@@ -772,19 +796,24 @@ window.__ModuleLoader__.load({
           && extra.tokensRange === usageRange && extra.tokensProvider === 'deepseek';
         // 旧版宿主没有 /quota/tokens：整个 Token 片段不占位。
         if (!(usageError && usage.error === 'unsupported')) {
-          const total = usageReady ? Number(usage.totals?.total) : undefined;
+          // 徽标展示全厂商总用量；带过滤的 totals 只用于 tooltip 里的 DeepSeek 官方分项。
+          const view = usageReady ? usage.all ?? usage : undefined;
+          const total = view !== undefined ? Number(view.totals?.total) : undefined;
+          const own = usageReady && usage.all !== undefined ? Number(usage.totals?.total) : undefined;
           let usageText;
-          if (total !== undefined && Number.isFinite(total)) usageText = formatCount(total);
+          if (total !== undefined && Number.isFinite(total)) usageText = formatTokens(total);
           else if (usage === undefined || !usageError) usageText = t('loading');
           else usageText = '--';
-          nodes.push(h('span', {
-            key: 'tokens',
-            className: 'zq-part',
-            title: total === undefined ? undefined : `${pillRangeLabel(t, usageRange)} ${t('tokensTitle')} ${formatExact(total)}`,
-          }, [
-            h('span', { key: 'tag', className: 'zq-token-tag' }, t('tokenShort')),
-            h('span', { key: 'range', className: 'zq-range' }, pillRangeLabel(t, usageRange)),
-            h('span', { key: 'num' }, usageText),
+          let title;
+          if (total !== undefined && Number.isFinite(total)) {
+            title = `${pillRangeLabel(t, usageRange)} ${t('tokensTotal')} ${formatExact(total)}`;
+            if (own !== undefined && Number.isFinite(own)) title += ` · DeepSeek ${formatExact(own)}`;
+          }
+          nodes.push(h('span', { key: 'tokens', className: 'zq-part', title }, [
+            // 区间与「总量」只给读屏与悬浮提示，视觉上保持紧凑。
+            h('span', { key: 'a11y', className: 'zq-sronly' }, `${pillRangeLabel(t, usageRange)} ${t('tokensTotal')}`),
+            h('span', { key: 'num', className: 'zq-num' }, usageText),
+            total !== undefined && Number.isFinite(total) ? h('span', { key: 'unit', className: 'zq-unit' }, 'tok') : null,
           ]));
         }
         const today = extra !== undefined && extra !== null ? extra.dsToday : undefined;
@@ -792,7 +821,7 @@ window.__ModuleLoader__.load({
           nodes.push(h('span', { key: 'sep-today', className: 'zq-sep', 'aria-hidden': true }, '·'));
           nodes.push(h('span', { key: 'today', className: 'zq-part zq-today', title: t('dsTodayCost') }, [
             h('span', { key: 'tag' }, t('todayShort')),
-            h('span', { key: 'num' }, formatMoney(today.totals.cost, today.totals.currency ?? 'CNY')),
+            h('span', { key: 'num', className: 'zq-num' }, formatMoney(today.totals.cost, today.totals.currency ?? 'CNY')),
           ]));
         }
         const balanceReady = data !== undefined && data !== null && data.ok === true && data.signedIn === true;
@@ -801,14 +830,14 @@ window.__ModuleLoader__.load({
           if (nodes.length > 0) nodes.push(h('span', { key: 'sep-balance', className: 'zq-sep', 'aria-hidden': true }, '·'));
           nodes.push(h('span', { key: 'balance', className: 'zq-part' }, [
             h('span', { key: 'tag' }, t('balanceShort')),
-            h('span', { key: 'num' }, formatMoney(data.total, data.currency ?? 'CNY')),
+            h('span', { key: 'num', className: 'zq-num' }, formatMoney(data.total, data.currency ?? 'CNY')),
           ]));
         } else if (nodes.length > 0) {
           // 有其他数据时余额位保持短占位，原因留给悬浮提示与面板。
           nodes.push(h('span', { key: 'sep-balance', className: 'zq-sep', 'aria-hidden': true }, '·'));
           nodes.push(h('span', { key: 'balance', className: 'zq-part', title: reason }, [
             h('span', { key: 'tag' }, t('balanceShort')),
-            h('span', { key: 'num' }, '--'),
+            h('span', { key: 'num', className: 'zq-num' }, '--'),
           ]));
         } else {
           return [h('span', { key: 'err' }, reason)];

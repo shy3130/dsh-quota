@@ -19,6 +19,10 @@ function writeSessionLog(home, workspace, sessionId, events) {
   fs.writeFileSync(path.join(dir, 'session.v4.jsonl.zstd'), Buffer.concat([first, second]));
 }
 
+function contextEvent(time, provider, model) {
+  return { type: 'request/context', seq: 0, time, data: { provider, model } };
+}
+
 function usageEvent(time, input, output, cacheRead) {
   return {
     type: 'assistant/message',
@@ -101,4 +105,30 @@ test('未知区间回落到 7 天', async () => {
   const home = makeHome();
   const data = await collectTokenUsage({ home, range: 'nope' });
   assert.equal(data.days, 7);
+});
+
+test('provider 过滤时 totals 只算该厂商，all 返回全厂商总用量', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-quota-split-'));
+  writeSessionLog(home, '--ws--', 'session-official', [
+    contextEvent(localDayStart(0) + 100, 'deepseek-account', 'deepseek-flash'),
+    usageEvent(localDayStart(0) + 1000, 100, 10, 900),
+  ]);
+  writeSessionLog(home, '--ws--', 'session-third-party', [
+    contextEvent(localDayStart(0) + 100, 'opencode-go', 'deepseek-v4.1-flash'),
+    usageEvent(localDayStart(0) + 2000, 200, 20, 1800),
+  ]);
+
+  const filtered = await collectTokenUsage({ home, range: 'today', provider: 'deepseek' });
+  assert.equal(filtered.totals.requests, 1);
+  assert.equal(filtered.totals.total, 1010);
+  assert.equal(filtered.totals.currency, 'CNY');
+  assert.equal(filtered.all.totals.requests, 2);
+  assert.equal(filtered.all.totals.total, 1010 + 2020);
+  assert.equal(filtered.all.totals.cost, 0); // 全量桶不累计价格
+  assert.equal(filtered.all.daily.length, 1);
+
+  const full = await collectTokenUsage({ home, range: 'today' });
+  assert.equal(full.totals.requests, 2);
+  assert.equal(full.totals.total, 1010 + 2020);
+  assert.equal(full.all, undefined); // 不带过滤时 totals 就是全量
 });
