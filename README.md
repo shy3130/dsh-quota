@@ -58,8 +58,7 @@ dsh plugin --profile desktop add github:shy3130/dsh-quota
 <img src="docs/images/opencode-go-pill.png" width="640" alt="OpenCode Go 状态栏徽标"><br>
 <img src="docs/images/deepseek-pill.png" width="640" alt="DeepSeek 状态栏徽标">
 
-> DeepSeek 徽标已改为「今日用量 · 今日消耗 · 余额」排布（见下方「徽标示意」），
-> `deepseek-pill.png` 为 1.4.x 版截图，新版截图待补。
+> DeepSeek 徽标按「今日用量 · 今日消耗 · 余额」排布：`284M tok` 是**今日**全厂商 Token 总用量（K / M / B 换算），7 天 / 30 天在弹层里切换查看。
 
 ### 明细面板
 
@@ -366,7 +365,7 @@ gh release create v1.3.x --title v1.3.x --notes "..."   # 可选：只写改动�
 | `locale/*.json` | 插件管理页显示的标题与说明（中 / 英） |
 | `icon.svg` | 插件图标 |
 | `test/*.mjs` | 冒烟与 token 聚合测试 |
-| `docs/images/` | README 截图（真实界面实拍） |
+| `docs/images/` | README 截图（用插件真实组件 + DSH 设计令牌渲染） |
 
 ## 许可证
 
