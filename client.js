@@ -284,9 +284,14 @@ window.__ModuleLoader__.load({
       '.zp-tokcost{margin-top:2px}',
       '.zp-tokcost .zp-toknum{color:var(--dsw-alias-label-secondary);font-weight:400}',
       '.zp-toksub{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px;font-variant-numeric:tabular-nums}',
-      '.zp-spark{display:flex;align-items:flex-end;gap:2px;height:18px;margin-top:4px}',
-      '.zp-spark i{flex:1;min-height:2px;border-radius:1px;background:var(--dsw-alias-state-business-primary);opacity:.85}',
-      '.zp-spark i[data-empty=true]{opacity:.25}',
+      '.zp-spark{display:flex;align-items:flex-end;gap:2px;height:30px;margin-top:6px;position:relative;padding-bottom:1px}',
+      '.zp-spark:after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--dsw-alias-border-l2);opacity:.75}',
+      '.zp-spark i{flex:1;min-height:3px;border-radius:2px 2px 1px 1px;background:var(--dsw-alias-state-business-primary);background:linear-gradient(180deg,var(--dsw-alias-state-business-primary) 0%,color-mix(in srgb,var(--dsw-alias-state-business-primary) 55%,transparent) 100%);opacity:.8;transition:height .18s ease}',
+      '.zp-spark i[data-peak=true],.zp-spark i[data-today=true]{opacity:1}',
+      '.zp-spark i[data-empty=true]{opacity:.2}',
+      // 7 天：柱子少，平分整行会又宽又扁 —— 限宽 14px 并两端对齐。
+      '.zp-spark[data-range="7d"]{gap:6px;justify-content:space-between}',
+      '.zp-spark[data-range="7d"] i{flex:0 1 16px;min-width:11px}',
       // 手机端（≤520px）：徽标更紧凑、弹层横向铺满并限制高度
       '@media (max-width:520px){'
         + '.zq-pill{gap:4px;padding:2px 7px}'
@@ -595,12 +600,16 @@ window.__ModuleLoader__.load({
         const metric = (item) => Number(item.total ?? 0);
         let max = 0;
         for (const item of daily) max = Math.max(max, metric(item));
-        children.push(h('div', { key: 'spark', className: 'zp-spark' },
+        // sqrt 缩放：单日峰值很大时，其余几天不会被压成一条线。
+        const ratioOf = (value) => (max === 0 ? 0 : Math.sqrt(Math.max(0, value) / max));
+        children.push(h('div', { key: 'spark', className: 'zp-spark', 'data-range': range },
           daily.map((item, index) => h('i', {
             key: `bar-${index}`,
             'data-empty': metric(item) === 0,
+            'data-peak': max > 0 && metric(item) === max,
+            'data-today': index === daily.length - 1,
             title: `${item.day} · ${formatTokens(item.total ?? 0)}`,
-            style: { height: `${Math.max(8, Math.round((metric(item) / (max === 0 ? 1 : max)) * 100))}%` },
+            style: { height: `${Math.max(10, Math.round(ratioOf(metric(item)) * 100))}%` },
           }))));
       }
       return h('section', { key: 'tokens', className: 'zp-tok' }, children);
